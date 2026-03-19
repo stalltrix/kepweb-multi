@@ -1,5 +1,9 @@
+github.com/stalltrix/kep-cli v0.0.0-20260319094138-8f32398b6373 h1:+Q29lQThYc6kX4uRY4MBcPEyWUpWhyDUa16Gh3oCakc=
+github.com/stalltrix/kep-cli v0.0.0-20260319094138-8f32398b6373/go.mod h1:ZKkTHhU9GrarauCYbVIDBabrJcTwDcxg0HimLHulw4k=
 github.com/stalltrix/kep-demo v0.0.0-20260319091651-fc2e03e51206 h1:Mbv9/RXXSMPsk9C+6pQNFs6T6jLkauMmr9cb6kBMkSk=
 github.com/stalltrix/kep-demo v0.0.0-20260319091651-fc2e03e51206/go.mod h1:WAIc6l6uJLAyuNbRbF/wjlVjTYXoQT+pL0d8BzeXpIU=
+github.com/stalltrix/kepweb v0.0.0-20260319102625-655338228008 h1:GMRoz1hPmpOrEF0veNi9O2bckIh9S3lpBMnl3hoO/wY=
+github.com/stalltrix/kepweb v0.0.0-20260319102625-655338228008/go.mod h1:lQreTa72tlqE1mTFjazbp3MJ7BvR15RhQtwrQWvFxME=
 golang.org/x/net v0.43.0 h1:lat02VYK2j4aLzMzecihNvTlJNQUq316m2Mr9rnM6YE=
 golang.org/x/net v0.43.0/go.mod h1:vhO1fvI4dGsIjh73sWfUVjj3N7CA9WkKJNQm2svM6Jg=
 golang.org/x/time v0.12.0 h1:ScB/8o8olJvc+CQPWrK3fPZNfh7qgwCrY0zJmoEQLSE=

@@ -1,25 +1,12 @@
-# kepweb
+# kepweb-multi
 
-kep webUI 界面，取代默认的kepcli，实现发帖/回帖/修改 webUI化
+kep webUI-multi程序，允许多用户共用一个节点。
 
+现实现为所有用户一个mainkey，以pkey区分用户，可能此实现不符合协议初衷
 
-配置方法：
+所有cname泛解析实现过原始kep协议txt验证
 
-neighbors指向自己的阶段，token填local_token
-```json
-"neighbors": [
-		{
-			"url": "http://127.0.0.1:8081",
-			"token": "token0"
-		}
-	]
-```
+<br>
 
-
-与kepcli的发送指令差不多
-```bash
-kepcli -act send -addr http://127.0.0.1:8081 -auth token0
-```
-
-
-kep实现有一个local_token，与普通token没用多大区别，唯一区别就是不会再把msg发回来，设计为local环境使用。
+### 注意：
+此程序bug较多，不推荐使用。由于bug造成的任何问题，自己承担bug风险

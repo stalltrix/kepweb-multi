@@ -19,14 +19,14 @@ import (
     "crypto/ed25519"
     "crypto/sha256"
     "encoding/binary"
-	"github.com/stalltrix/kepweb/config"
+	"kepweb-multi/config"
 	"io/fs"
 	"embed"
 	"golang.org/x/time/rate"
 	"io"
 	"net/url"
+	"github.com/stalltrix/kep-cli/keygen"
 	"html/template"
-	"path/filepath"
 )
 
 type Reply struct {
@@ -84,16 +84,20 @@ type tokenLimiter struct {
     lastUsed  int64
 }
 
+type UserInfo struct {
+    Name  string
+	Is_admin bool
+}
+
 var (
     postStore = make(map[string]*Post)
 	fileIndex []byte
 	fileNewPost []byte
 	allLook   sync.RWMutex
 	sessMap sync.Map
-	g_goken string
 	myself string
 	nextroute []send.NextMsg
-	mainPub,priv,signKey,pub []byte
+	mainPub,mainPriv []byte
 	nonceMap sync.Map 
 	maxMarkdownSize = 60 * 1024
 	Idxcache indexCache 
@@ -108,6 +112,9 @@ var (
 	manager_tmpl *template.Template
 	will_change_reply map[string]Reply
 	top_post PostIndexView //置顶帖子
+	userInfo = make(map[string]UserInfo)
+	userLock sync.RWMutex
+	keyfile string
 )
 
 //go:embed static/*
@@ -155,10 +162,15 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
     }
 	
 	is_login := false
+	var uinfo *UserInfo
 	cookie, err := r.Cookie("seesion")
 	if err == nil {
 		if cookie.Value != "" {
-			_,is_login=sessMap.Load(cookie.Value)
+			var val interface{}
+			val,is_login=sessMap.Load(cookie.Value)
+			if is_login {
+				uinfo=val.(*UserInfo)
+			}
 		}
 	}
 
@@ -190,15 +202,15 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
             http.Error(w, "not suppered", http.StatusBadRequest)
             return
         }
-		hash,_:=async_send(req)
+		hash,_:=async_send(req,uinfo)
 		
 		replyID:=len(post.Replies)+1
 		allLook.Lock()
 		reply := Reply{
             ID:   replyID,
-            User: myself,
+            User: uinfo.Name,
             Meta: "",
-            Me:   post.Owner==myself,
+            Me:   post.Owner==uinfo.Name,
             Post: req.PostPayload,
             Time: time.Now().Unix(),
 			Tag: uint16(req.Tag),
@@ -344,8 +356,23 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func async_send(payload ReplyRequest) (string,error) {
+func async_send(payload ReplyRequest,uinfo *UserInfo) (string,error) {
 	var err error
+	var priv,signKey,pub []byte
+	pub, err = os.ReadFile(keyfile+"/"+uinfo.Name+".pub")
+    if err != nil {
+	   return "",err
+    }
+	
+    priv, err = os.ReadFile(keyfile+"/"+uinfo.Name+".priv")
+    if err != nil {
+        return "",err
+    }
+
+    signKey, err = os.ReadFile(keyfile+"/"+uinfo.Name+".sig")
+    if err != nil {
+       return "",err
+    }
     version := byte(1)
     hashtype := byte(1)
     typeID := byte(payload.TypeID & 255)
@@ -354,7 +381,7 @@ func async_send(payload ReplyRequest) (string,error) {
     ttl := byte(128)
     compressType := byte(0)
 
-    domain := []byte(myself)
+    domain := []byte(uinfo.Name)
     txt := []byte(payload.PostPayload)
     
 	var pointTo []byte
@@ -369,7 +396,7 @@ func async_send(payload ReplyRequest) (string,error) {
 		}
 		pointTo = bytes
 	}
-
+	
     buf := new(bytes.Buffer)
 
     buf.WriteByte(version)
@@ -652,12 +679,14 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"status":0}`))
 			return
 		}
-		_,ok:=sessMap.Load(cookie.Value)
+		val,ok:=sessMap.Load(cookie.Value)
 		if !ok {
 			w.Write([]byte(`{"status":0}`))
 			return
 		}
-		w.Write([]byte(`{ "status":1, "user":"`+myself+`" }`))
+		info:=val.(*UserInfo)
+		
+		w.Write([]byte(`{ "status":1, "user":"`+info.Name+`" }`))
 }
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -677,7 +706,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         w.Write([]byte(`{"status":0}`))
 		return
     }
-	if req.Token != g_goken {
+	userLock.RLock()
+	info,ok:=userInfo[req.Token]
+	userLock.RUnlock()
+	if !ok {
 		w.Write([]byte(`{"status":0}`))
         return
 	}
@@ -698,13 +730,13 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
     SameSite: http.SameSiteLaxMode,
 	}
     http.SetCookie(w, cookie)
-	sessMap.Store(sess,struct{}{})
+
+	sessMap.Store(sess,&info)
 	time.AfterFunc(3600*24*15*time.Second, func() {
 		sessMap.Delete(sess)
 	})
-	w.Write([]byte(`{"status":1,"user":"`+myself+`"}`))
+	w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"https://i.pravatar.cc/100"}`))
 }
-
 
 func main() {
 	argc:=len(os.Args)
@@ -715,21 +747,13 @@ func main() {
 	}
 	cfg_file:=os.Args[1]
 	var err error
-	self:=""
-	exePath, err := os.Executable()
-    if err == nil {
-        self = filepath.Dir(exePath)
-		kepdb.Init_path(self)
-    }else{
-		log.Println("find self dir err:",err)
-	}
 	
-	fileNewPost,err=os.ReadFile(filepath.Join(self, "markdown.html"))
+	fileNewPost,err=os.ReadFile("markdown.html")
 	if err!=nil {
 		log.Fatalln("can't read markdown.html",err)
 	}
 	
-	manager_tmpl,err=template.ParseFiles(filepath.Join(self, "manager.html"))
+	manager_tmpl,err=template.ParseFiles("manager.html")
 	if err!=nil {
 		log.Fatalln("can't read manager.html",err)
 	}
@@ -739,18 +763,17 @@ func main() {
 		log.Fatalln("can't read config.json",err)
 	}
 	
-	fileIndex,err=os.ReadFile(filepath.Join(self, "ui.html"))
+	fileIndex,err=os.ReadFile("ui.html")
 	if err!=nil {
 		log.Fatalln("can't read ui.html",err)
 	}
-
-	if len(cfg.Token) < 8 {
-		log.Fatal("Err: token is null")
+	
+	if cfg.Keyfile=="" {
+		log.Fatal("Err: keyfile is null")
 	}
 	if len(cfg.ApiToken) < 8 {
 		log.Fatal("Err: token is null")
 	}
-	g_goken = cfg.Token
 	myself = cfg.Domain
 	token_UrlApi=cfg.ApiToken
 	
@@ -775,27 +798,26 @@ func main() {
     if err != nil {
        log.Fatal("Err: read user key err:",err)
     }
+	mainPriv, err = os.ReadFile(cfg.Mainpriv)
+	if err != nil {
+		log.Fatal("Err: read user priv err:",err)
+	}
 	
-	pub, err = os.ReadFile(cfg.PubKey)
-    if err != nil {
-       log.Fatal("Err: read user key err:",err)
-    }
+	keyfile = cfg.Keyfile
 	
-    priv, err = os.ReadFile(cfg.PrivKey)
-    if err != nil {
-        log.Fatal("Err: read user key err:",err)
-    }
-
-    signKey, err = os.ReadFile(cfg.SigKey)
-    if err != nil {
-        log.Fatal("Err: read user key err:",err)
-    }
+	err = loadUserInfo("userinfo.json")
+	if err!=nil{
+		log.Fatal("Err: read userinfo err:",err)
+	}
+	
 	initData()
+	
     http.HandleFunc("/view/", viewHandler)
     http.HandleFunc("/index/", indexHandler)
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/me", meHandler)
 	http.HandleFunc("/index.php", indexpage)
+	http.HandleFunc("/t/topic/", indexpage)
 	http.HandleFunc("/manager", managerHandler)
 	
 	staticFS, _ := fs.Sub(staticFiles, "static")
@@ -816,6 +838,7 @@ func main() {
 	if token_urlPort == "" {
 		token_urlPort="10428"
 	}
+
     log.Println("server started on: ",cfg.Listen)
 	if argc >2 {
 	logfile:=os.Args[2]
@@ -845,12 +868,20 @@ func managerHandler(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        _, ok := sessMap.Load(cookie.Value)
+        val, ok := sessMap.Load(cookie.Value)
         if !ok {
             w.WriteHeader(403)
             w.Write([]byte("access deny"))
             return
         }
+		
+		info:=val.(*UserInfo)
+		
+		if !info.Is_admin {
+			w.WriteHeader(403)
+            w.Write([]byte("access deny"))
+            return
+		}
 		
 	type User struct {
 		Req string `json:"req"`
@@ -865,12 +896,10 @@ func managerHandler(w http.ResponseWriter, r *http.Request) {
         http.Error(w, err.Error(), http.StatusBadRequest)
         return
     }
-		
 		if user.Csrf != manager_csrf{
 			http.Error(w, "csrf token err", http.StatusBadRequest)
 			return
 		}
-		
 		req := user.Req
 		act := user.Act
 		Ner_url:=user.Url
@@ -937,6 +966,22 @@ case "list":{
     json.NewEncoder(w).Encode(out)
 }
 case "ban":{
+	if strings.Contains(act, ":") {
+	if strings.HasSuffix(act, myself) {
+		userLock.Lock()
+		_,ok:=userInfo[act]
+		if ok {delete(userInfo,act);}
+		userLock.Unlock()
+		if ok {
+			io.WriteString(w,`{"state":"OK"}`)
+		} else {
+			io.WriteString(w,`{"state":"not found"}`)
+		}
+	}else{
+		io.WriteString(w,`{"state":"req err, need user:pass"}`)
+	}
+	return
+	}
 	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=ban&req="+url.QueryEscape(act)+"&token="+token_UrlApi
 	resp, err := http.Get(url)
 	if err != nil {
@@ -948,6 +993,41 @@ case "ban":{
 	io.WriteString(w,`{"state":"OK"}`)
 }
 case "unban":{
+	if strings.Contains(act, ":") {
+	if strings.HasSuffix(act, myself) {
+		p := strings.Split(act, ":")
+		if len(p[0])<1{
+			io.WriteString(w,`{"state":"username too short"}`)
+			return
+		}
+		userLock.Lock()
+		_,ok:=userInfo[act]
+		if !ok {
+				userInfo[act]=UserInfo{
+					Name: p[0],
+					Is_admin: false,
+				}
+		}
+		userLock.Unlock()
+		if !ok {
+			pub, priv, err:=keygen.Gen_pkey()
+			if err!=nil{
+				io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+				return
+			}
+			signKey:=keygen.Sig_pkey(pub, mainPriv)
+			os.WriteFile(keyfile+"/"+p[0]+".pub", pub, 0600);
+			os.WriteFile(keyfile+"/"+p[0]+".priv", priv, 0600);
+			os.WriteFile(keyfile+"/"+p[0]+".sig", signKey, 0600);
+			io.WriteString(w,`{"state":"OK"}`)
+		} else {
+			io.WriteString(w,`{"state":"user exist"}`)
+		}
+	}else{
+		io.WriteString(w,`{"state":"req err, need user:pass"}`)
+	}
+	return
+	}
 	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=unban&req="+url.QueryEscape(act)+"&token="+token_UrlApi
 	resp, err := http.Get(url)
 	if err != nil {
@@ -1088,12 +1168,13 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        _, ok := sessMap.Load(cookie.Value)
+        val, ok := sessMap.Load(cookie.Value)
         if !ok {
             w.WriteHeader(403)
             w.Write([]byte("access deny"))
             return
         }
+		info:=val.(*UserInfo)
 
         if r.Method == http.MethodPost {
 
@@ -1141,7 +1222,7 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
                 return
             }
 
-			sendNewPost(markdown,tagn,typeidn,point_to,point_to_root)
+			sendNewPost(markdown,tagn,typeidn,point_to,point_to_root,info)
 
             w.Write([]byte("post ok"))
             return
@@ -1156,7 +1237,7 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
         } else if manager == "banuser" {
 			
             w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	u := struct {
+    u := struct {
 		Tokenk1 string
 	}{
         Tokenk1: manager_csrf,
@@ -1192,19 +1273,19 @@ func addNonce(nonce string) bool {
     return true
 }
 
-func sendNewPost(txt string,tag,typeid int,point_to,point_to_root string){
+func sendNewPost(txt string,tag,typeid int,point_to,point_to_root string,uinfo *UserInfo){
 	var req ReplyRequest
 	req.PostPayload=txt
 	req.Tag = tag
 	req.TypeID = typeid
 	req.Point_to=point_to+point_to_root
         
-	hash,_:=async_send(req)
+	hash,_:=async_send(req,uinfo)
 	if hash == "" {
 		return
 	}
 	timestamp:=int64(time.Now().Unix())
-	var newRly = []Reply{{ID: 1, User: myself, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: uint16(req.Tag), Hex: hash},}
+	var newRly = []Reply{{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: uint16(req.Tag), Hex: hash},}
 	
 if req.Tag == 65534 {
 	val,ok:=二维指针.Load(point_to)
@@ -1217,14 +1298,14 @@ if req.Tag == 65534 {
 	allLook.RUnlock()
 	if ok {
 		if NowV.y==0{
-		if o_post.Owner == myself{
+		if o_post.Owner == uinfo.Name{
 		o_tag:=o_post.Replies[0].Tag
 		o_post.TypeID=byte(typeid & 255)
-		o_post.Replies[0]=Reply{ID: 1, User: myself, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
+		o_post.Replies[0]=Reply{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
 		}}else{
 			if len(o_post.Replies)>NowV.y{
 		o_tag:=o_post.Replies[NowV.y].Tag
-		o_post.Replies[NowV.y]=Reply{ID: NowV.y+1, User: myself, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
+		o_post.Replies[NowV.y]=Reply{ID: NowV.y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
 			}
 		}
 	}
@@ -1233,7 +1314,7 @@ if req.Tag == 65534 {
 	postStore[hash] = &Post{
         PostHex: hash,
         TagID:   uint16(tag),
-        Owner:   myself,
+        Owner:   uinfo.Name,
         LastTime: timestamp,
         Replies: newRly,
 		TypeID: byte(typeid & 255),
@@ -1247,6 +1328,16 @@ if req.Tag == 65534 {
 }
 	sortList[sortIdx]=hash
 	sortIdx++
+}
+
+func autoSave(){
+for{
+	time.Sleep(time.Second*300)
+	err := saveUserInfo("userinfo.json")
+	if err!=nil{
+		log.Println("err: save user task:",err)
+	}
+}
 }
 
 func unix40() []byte {
@@ -1281,4 +1372,35 @@ func randSess(n int) (string, error) {
         bytes[i] = letters[int(bytes[i])%len(letters)]
     }
     return string(bytes), nil
+}
+
+func loadUserInfo(filename string) error {
+    file, err := os.Open(filename)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+
+    decoder := json.NewDecoder(file)
+    err = decoder.Decode(&userInfo)
+    if err != nil {
+        return err
+    }
+	return nil
+}
+
+func saveUserInfo(filename string) error {
+    file, err := os.Create(filename)
+    if err != nil {
+		return err
+    }
+    encoder := json.NewEncoder(file)
+	userLock.RLock()
+    err = encoder.Encode(userInfo)
+	userLock.RUnlock()
+	file.Close()
+    if err != nil {
+        return err
+    }
+	return nil
 }
