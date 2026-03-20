@@ -888,6 +888,7 @@ func managerHandler(w http.ResponseWriter, r *http.Request) {
 		Act string `json:"act"`
 		Csrf string `json:"csrf"`
 		Url string `json:"url"`
+		RPM int `json:"rpm"`
 	}
 	
 	var user User
@@ -1110,7 +1111,7 @@ case "add_neighbor":{
 		io.WriteString(w,`{"state":"neighbor url not start with http?://"}`)
 		return
 	}
-	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=neighbor&req=set&key="+url.QueryEscape(act)+"&token="+token_UrlApi+"&url="+url.QueryEscape(Ner_url)
+	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=neighbor&req=set&key="+url.QueryEscape(act)+"&token="+token_UrlApi+"&url="+url.QueryEscape(Ner_url)+"&rpm="+strconv.Itoa(user.RPM)
 	resp, err := http.Get(url)
 	if err != nil {
 		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
