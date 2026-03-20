@@ -1110,7 +1110,7 @@ case "add_neighbor":{
 		io.WriteString(w,`{"state":"neighbor url not start with http?://"}`)
 		return
 	}
-	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=neighbor&req=set&key="+url.QueryEscape(act)+"&token="+token_UrlApi+"&url="+Ner_url
+	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=neighbor&req=set&key="+url.QueryEscape(act)+"&token="+token_UrlApi+"&url="+url.QueryEscape(Ner_url)
 	resp, err := http.Get(url)
 	if err != nil {
 		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
