@@ -176,6 +176,11 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 
     postHex := parts[2]
 	
+	if len(postHex)!=64{
+		http.Error(w, "post not found", http.StatusNotFound)
+        return
+	}
+	
 	allLook.RLock()
     post, ok := postStore[postHex]
 	allLook.RUnlock()
