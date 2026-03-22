@@ -161,6 +161,11 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 	
+	if len(parts[1])>5{
+		http.Error(w, "post not found", http.StatusNotFound)
+        return
+	}
+	
 	is_login := false
 	var uinfo *UserInfo
 	cookie, err := r.Cookie("seesion")
@@ -254,6 +259,23 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 	
+	if len(tagID)>5{
+		http.Error(w, "invalid page", http.StatusBadRequest)
+        return
+	}
+	tag:=-1
+	if tagID != "all" {
+		tag,err=strconv.Atoi(tagID)
+		if err !=nil {
+			http.Error(w, "invalid page", http.StatusBadRequest)
+			return
+		}
+		if tag <0 || tag > 65535 {
+			http.Error(w, "invalid page", http.StatusBadRequest)
+			return
+		}
+	}
+	
 	is_login := false
 	cookie, err := r.Cookie("seesion")
 	if err == nil {
@@ -299,10 +321,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			_,ok:=diff[hex]
 			if ok {
-				continue
-			}
-			tag,err:=strconv.Atoi(tagID)
-			if err !=nil {
 				continue
 			}
 			post, ok := postStore[hex]
