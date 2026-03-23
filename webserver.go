@@ -100,7 +100,7 @@ var (
 	mainPub,mainPriv []byte
 	nonceMap sync.Map 
 	maxMarkdownSize = 60 * 1024
-	Idxcache indexCache 
+	Idxcache sync.Map 
 	token_UrlApi string
 	token_urlPort string
 	sortList [65536]string
@@ -133,6 +133,24 @@ func startLimiterCleaner() {
                 return true
             })
         }
+}
+
+var hexTable = [256]bool{
+    '0': true, '1': true, '2': true, '3': true, '4': true,
+    '5': true, '6': true, '7': true, '8': true, '9': true,
+    'a': true, 'b': true, 'c': true, 'd': true, 'e': true, 'f': true,
+}
+
+func IsHex(s string) bool {
+	if len(s)!=64{
+		return false
+	}
+    for i := 0; i < 64; i++ {
+        if !hexTable[s[i]] {
+            return false
+        }
+    }
+    return true
 }
 
 func getLimiter(ipaddr string) *rate.Limiter {
@@ -186,6 +204,11 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         return
 	}
 	
+	if !IsHex(postHex){
+		http.Error(w, "post not found", http.StatusNotFound)
+        return
+	}
+	
 	allLook.RLock()
     post, ok := postStore[postHex]
 	allLook.RUnlock()
@@ -204,12 +227,12 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	
 	if http.MethodPost==r.Method{
 		if !is_login {
-			http.Error(w, "not suppered", http.StatusBadRequest)
+			w.WriteHeader(405)
 			return
 		}
 		var req ReplyRequest
         if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-            http.Error(w, "not suppered", http.StatusBadRequest)
+            w.WriteHeader(405)
             return
         }
 		hash,_:=async_send(req,uinfo)
@@ -241,6 +264,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"status": "ok"}`))
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(post.Replies)
 }
 
@@ -284,12 +308,22 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
+	var Idxdata *indexCache
 	if !is_login {
-		now:=int64(time.Now().Unix())
-		if Idxcache.Last +90 > now {
+		if pageIdx > 99 {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(Idxcache.Txt)
+			w.Write([]byte("{}"))
 			return
+		}
+		val,ok:=Idxcache.Load(tagID+":"+parts[2])
+		if ok {
+		Idxdata=val.(*indexCache)
+		now:=int64(time.Now().Unix())
+		if Idxdata.Last +40 > now {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(Idxdata.Txt)
+			return
+		}
 		}
 	}
 	
@@ -374,8 +408,16 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"status":0}`))
 		return
 	}
-	Idxcache.Txt=b
-	Idxcache.Last=time.Now().Unix()
+	
+	if pageIdx < 100 {
+	if Idxdata == nil {
+		newData:=&indexCache{}
+		Idxcache.Store(tagID+":"+parts[2],newData)
+		Idxdata=newData
+	}
+	Idxdata.Txt=b
+	Idxdata.Last=time.Now().Unix()
+	}
 	w.Write(b)
 }
 
@@ -1090,6 +1132,7 @@ case "top":{
 }
 case "delmsg":{
 	del_ok:=false
+	is_root:=false
 	val,ok:=二维指针.Load(act)
 	if ok {
 		nowV:=val.(*map向量)
@@ -1098,6 +1141,7 @@ case "delmsg":{
     _,ok=postStore[nowV.x]
 	if ok {delete(postStore,nowV.x);del_ok=true;}
 	allLook.Unlock()
+	is_root=true
 		}else{
 	allLook.RLock()
     post,ok:=postStore[nowV.x]
@@ -1107,16 +1151,35 @@ case "delmsg":{
 		if len(post.Replies)>nowV.y{
 			post.Replies[nowV.y].Post="[user delete]"
 		}
+	}
+		}
+		
+		if del_ok {
 		path,err:=kepdb.FindALLFile(act + ".mdb")
 		if err!=nil {
 			log.Println("del post err:",err)
 		}else{
 			os.Remove(path)
+			if is_root {
+				path2,err:=kepdb.FindFile(act + ".txt")
+				if err!=nil {
+					log.Println("del idx err:",err)
+				}else{
+					subs,err:=kepdb.ReadSub(act)
+					if err ==nil {
+						for _,sub := range subs {
+							sub_path,err:=kepdb.FindALLFile(sub + ".mdb")
+							if err != nil {
+								log.Println("del sub err:",err)
+							}else{
+								os.Remove(sub_path)
+							}
+						}
+					}
+					os.Remove(path2)
+				}
+			}
 		}
-	}
-		}
-		
-		if del_ok {
 		io.WriteString(w,`{"state":"del post OK"}`)
 		} else {
 			io.WriteString(w,`{"state":"del post not found"}`)
