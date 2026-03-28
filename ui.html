@@ -883,7 +883,7 @@ ${item.typeid}
 </div>
 
 <div class="posters">
-    <img src="${this.escape(getAvatar(metaObj))}" title="${displayName}" alt="user avatar">
+    <img src="${this.escape(getAvatar(metaObj,item))}" title="${displayName}" alt="${displayName}">
 </div>
 
 <div class="stats">${item.reply}</div>
@@ -1042,13 +1042,13 @@ window.onpopstate = function(e){
     }
 
 };
-function getAvatar(item){
+function getAvatar(item,ietm){
 
-    if(item.img && item.img.trim() !== ""){
+    if(item && item.img && item.img.trim() !== ""){
         return item.img;
     }
 
-    const seed = encodeURIComponent(item.user || "user0");
+    const seed = encodeURIComponent(ietm.user || "user0");
 
     return `https://api.dicebear.com/7.x/micah/svg?seed=${seed}`;
 }
