@@ -843,7 +843,32 @@ async loadIndex(){
 
         const dateStr = new Date(item.lasttime*1000).toLocaleString();
 		const tag = TAG_MAP[item.tag] || {name:"未知",color:"#999"};
-		//console.log(item)
+		let metaObj = null;
+            try {
+                if (item.meta) {
+                    metaObj = JSON.parse(item.meta);
+                }
+            } catch(e) {}
+
+            let displayName = this.escape(item.own);
+
+            if (metaObj) {
+                if (metaObj.name) {
+                    displayName = this.escape(metaObj.name);
+                }
+            }
+
+            let typeBadge = "";
+            if (item.typeid && item.typeid != 0) {
+                typeBadge = `
+<span style="display:inline-flex;align-items:center;margin-left:6px;color:red;">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px;">
+  <rect x="5" y="11" width="14" height="10" rx="2"></rect>
+  <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+</svg>
+${item.typeid}
+</span>`;
+            }
         el.innerHTML = `
 
 <div class="topic-main">
@@ -854,11 +879,11 @@ async loadIndex(){
         <span class="badge-color" style="background:${tag.color}"></span>
         ${tag.name}
     </div>
-
+	${typeBadge}
 </div>
 
 <div class="posters">
-    <img src="${getAvatar(item)}">
+    <img src="${this.escape(getAvatar(metaObj))}" title="${displayName}" alt="user avatar">
 </div>
 
 <div class="stats">${item.reply}</div>
@@ -892,6 +917,33 @@ async loadPost(hex){
     container.innerHTML="";
 
     data.forEach(item => {
+	
+	let metaObj = null;
+    try {
+        if (item.meta) {
+            metaObj = JSON.parse(item.meta);
+        }
+    } catch(e) {}
+
+    let displayName = this.escape(item.user);
+    let userSuffix = "";
+    let avatar = "";
+    let metaId = this.escape(item.meta);
+
+    if (metaObj) {
+
+        if (metaObj.name) {
+            displayName = this.escape(metaObj.name);
+			if (metaObj.id) {
+				userSuffix = ` (${this.escape(metaObj.id)})`;
+			}
+			metaId = this.escape(item.user);
+        }
+
+        if (metaObj.img) {
+            avatar = `<img src="${this.escape(metaObj.img)}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
+        }
+    }
 
     const el = document.createElement("div");
 
@@ -900,12 +952,12 @@ async loadPost(hex){
         <div class="comment-header">
 
             <div class="comment-user">
-                <span class="comment-id">#${item.id}</span>
-                ${this.escape(item.user)}
+                ${avatar}<span class="comment-id">#${item.id}</span>
+                ${displayName} ${userSuffix}
             </div>
 
             <div class="comment-meta">
-                ${this.escape(item.meta)}
+                ${metaId}
             </div>
 
         </div>

@@ -1,5 +1,5 @@
 /**
- * kep markdown resolv v0.1 - a safe markdown parser
+ * kep markdown resolv v0.2 - a safe markdown parser
  * Copyright (c) 2024-2026, ALL kep Contributors. (MIT Licensed)
  * require marked v15.0.12
  */
@@ -31,6 +31,13 @@ function renderVideoShortcut(text) {
   });
 }
 const renderer = {
+  code({ text, lang }) {
+    const langClass = lang ? ` class="language-${lang}"` : '';
+    return `<pre><code${langClass}>${text}</code></pre>`;
+  },
+  codespan({ text }) {
+    return `<code>${text}</code>`;
+  },
    link({ href, title, tokens }) {
     if (!/^https?:\/\//i.test(href)) {
       return this.parser.parseInline(tokens);

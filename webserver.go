@@ -8,7 +8,7 @@ import (
     "strings"
     "sync"
 	"os"
-	"github.com/stalltrix/kepweb/kepdb"
+	"github.com/stalltrix/kep-demo/kepdb"
 	"github.com/stalltrix/kep-demo/kepresolv"
 	"github.com/stalltrix/kep-demo/send"
 	"github.com/stalltrix/kep-demo/ntp"
@@ -27,6 +27,8 @@ import (
 	"net/url"
 	"github.com/stalltrix/kep-cli/keygen"
 	"html/template"
+	"sort"
+	"github.com/stalltrix/kepweb/meta"
 )
 
 type Reply struct {
@@ -38,6 +40,7 @@ type Reply struct {
     Time int64  `json:"-"`
 	Tag  uint16  `json:"tag"`
 	Hex string  `json:"hex"`
+	MetaTime int64 `json:"-"`
 }
 
 type Post struct {
@@ -56,6 +59,8 @@ type PostIndexView struct {
     Lastview string `json:"lastview"`
 	Hex      string `json:"hex"`
 	Tag      uint16 `json:"tag"`
+	TypeId   byte `json:"typeid"`
+	Meta     string `json:"meta"`
 }
 
 type ReplyRequest struct {
@@ -112,6 +117,7 @@ var (
 	manager_tmpl *template.Template
 	will_change_reply map[string]Reply
 	top_post PostIndexView //置顶帖子
+	echoMeta bool
 	userInfo = make(map[string]UserInfo)
 	userLock sync.RWMutex
 	keyfile string
@@ -264,6 +270,21 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"status": "ok"}`))
 		return
 	}
+		
+	if echoMeta {
+		respReplies:=post.Replies
+		time_now:=time.Now().Unix()
+		if respReplies[0].MetaTime+3600*2 < time_now {
+		for i:=range respReplies {
+			metaData,err:=meta.Meta_get(respReplies[i].User,respReplies[i].Hex[:6])
+			if err == nil {
+				respReplies[i].Meta=metaData
+			}
+		}
+		respReplies[0].MetaTime=time_now
+		}
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(post.Replies)
 }
@@ -392,6 +413,13 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			line := strings.SplitN(p.Replies[0].Post, "\n", 2)[0]
             lastView = strings.TrimPrefix(line, "# ")
         }
+		metaData:=""
+		if echoMeta {
+			metadata,err:=meta.Meta_get(p.Owner,"")
+			if err == nil {
+				metaData=metadata
+			}
+		}
         resp = append(resp, PostIndexView{
             Own:      p.Owner,
             Lasttime: strconv.FormatInt(p.Replies[len(p.Replies)-1].Time, 10),
@@ -399,6 +427,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
             Lastview: lastView,
 			Hex: p.PostHex,
 			Tag: p.TagID,
+			TypeId: p.TypeID,
+			Meta: metaData,
         })
     }
 	
@@ -540,16 +570,18 @@ func loadData(tag string,renew bool){
 					allLook.RUnlock()
 				if ok {
 					if tag_i == 65534 {
-						if nowV.y == 0 {
 						if (key_des == o_key_des) && bytes.Equal(domain,o_domain){
+						if nowV.y == 0 {
 						if timestamp > o_post.Replies[0].Time{
 							o_post.TypeID=byte(perm & 255)
-							o_post.Replies[0]=Reply{ID: 1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
-						}}}else {
+							o_post.Replies[0]=Reply{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
+						}}else {
 							if len(o_post.Replies)>nowV.y{
+								if timestamp > o_post.Replies[nowV.y].Time{
 								o_post.Replies[nowV.y]=Reply{ID: nowV.y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
+								}
 							}
-						}
+						}}
 						return
 					}
 						lastID:=len(o_post.Replies)
@@ -597,7 +629,7 @@ for _,sub := range subs {
     ID:   1,
     User: string(domain2),
     Meta: "",
-    Me:   string(domain2)==myself,
+    Me:   true,
     Post: string(txt2),
     Time: timestamp2,
 	Tag: tag_i,
@@ -627,7 +659,12 @@ for _,sub := range subs {
 	}
 }
 			}
-			
+	sort.Slice(newRly, func(i, j int) bool {
+		if i==0||j==0{
+			return false
+		}
+		return newRly[i].Time < newRly[j].Time
+	})	
 	allLook.Lock()
     postStore[tag] = &Post{
         PostHex: tag,
@@ -661,7 +698,7 @@ func initData() {
 	for _,tag := range tags {
 	hexs,err:=kepdb.ReadHash(tag)
 	if err ==nil {
-	txt,domain,timestamp,point_to,_,_,_,tag_i,point_to_root,err:=kepresolv.Resolv(hexs)
+	txt,domain,timestamp,point_to,_,key_des,_,tag_i,point_to_root,err:=kepresolv.Resolv(hexs)
 			if err !=nil {
 				log.Println("load data err:",err)
 				continue;
@@ -670,18 +707,57 @@ func initData() {
 				continue;
 			}
 		point_to_hex:=hex.EncodeToString(point_to)
-		_,ok:=will_change_reply[point_to_hex]
+		hexbyte,err:=kepdb.ReadHash(point_to_hex)
+		if err!=nil{
+			log.Println("debug: point_to_hex not found",err)
+			continue;
+		}
+		_,ori_domain,_,_,_,ori_key_des,_,_,_,err:=kepresolv.Resolv(hexbyte)
+		if err!=nil{
+			log.Println("debug: point msg not found",err)
+			continue;
+		}
+		if !(bytes.Equal(ori_domain,domain) && (ori_key_des==key_des)){
+			log.Println("mot match ori_ley",string(domain))
+			continue;
+		}
+		
+		point_root:=hex.EncodeToString(point_to_root)
+		rootbyte,err:=kepdb.ReadHash(point_root)
+		if err!=nil{
+			log.Println("debug: point_to_root not found",err)
+			continue;
+		}
+		_,ori_domain_root,_,_,_,ori_key_des_root,_,_,_,err:=kepresolv.Resolv(rootbyte)
+		if err!=nil{
+			log.Println("debug: point root msg not found",err)
+			continue;
+		}
+		nowRly,ok:=will_change_reply[point_to_hex]
 		if !ok {
 	will_change_reply[point_to_hex]=Reply{
     ID:   0,
     User: string(domain),
     Meta: "",
-    Me:   string(domain)==myself,
+    Me:   bytes.Equal(ori_domain_root,domain) && (ori_key_des_root==key_des),
     Post: string(txt),
     Time: timestamp,
 	Tag: tag_i,
 	Hex: point_to_hex,
 	}
+	}else{
+		if timestamp > nowRly.Time{
+	will_change_reply[point_to_hex]=Reply{
+    ID:   0,
+    User: string(domain),
+    Meta: "",
+    Me:   bytes.Equal(ori_domain_root,domain) && (ori_key_des_root==key_des),
+    Post: string(txt),
+    Time: timestamp,
+	Tag: tag_i,
+	Hex: point_to_hex,
+	}
+		}
 	}}}
 	for k,v:=range will_change_reply {
 		val,ok:=二维指针.Load(k)
@@ -705,7 +781,6 @@ func initData() {
 	will_change_reply=nil
 	}
 }
-
 
 func auto_renew_data(){
 for {
@@ -841,6 +916,7 @@ func main() {
 	}
 	myself = cfg.Domain
 	token_UrlApi=cfg.ApiToken
+	echoMeta = cfg.Metaon
 	
 	if myself == "" {
 		log.Fatal("Err: myself is null")
@@ -916,6 +992,7 @@ func main() {
 	}
 	go auto_renew_data();
 	go auto_renew_csrf();
+	go meta.NewTTLMap()
     log.Fatal(http.ListenAndServe(cfg.Listen, nil))
 }
 
@@ -1120,6 +1197,13 @@ case "top":{
 	}
 	line := strings.SplitN(post_top.Replies[0].Post, "\n", 2)[0]
     lastView := strings.TrimPrefix(line, "# ")
+	metaData:=""
+	if echoMeta {
+		metadata,err:=meta.Meta_get(post_top.Owner,"")
+		if err == nil {
+			metaData=metadata
+		}
+	}
 	top_post=PostIndexView{
             Own:      post_top.Owner,
             Lasttime: strconv.FormatInt(post_top.Replies[len(post_top.Replies)-1].Time, 10),
@@ -1127,6 +1211,8 @@ case "top":{
             Lastview: lastView,
 			Hex: post_top.PostHex,
 			Tag: post_top.TagID,
+			TypeId: post_top.TypeID,
+			Meta: metaData,
         }
 	io.WriteString(w,`{"state":"set-top: OK"}`)
 }
