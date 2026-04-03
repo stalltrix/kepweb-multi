@@ -364,6 +364,11 @@
 .search-link:hover{
     color:var(--primary-color);
 }
+.current-tag{
+    font-size:13px;
+    color: var(--text-muted);
+    margin-bottom:12px;
+}
     </style>
 	<link rel="stylesheet" href="/static/markdown.min.css">
 </head>
@@ -414,7 +419,7 @@ stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="r
 <span style="margin-left:6px;">搜索</span>
 
 </span>
-    <svg width="20" height="20" viewBox="0 0 24 24"
+    <svg id="menu-toggle" width="20" height="20" viewBox="0 0 24 24"
 fill="none" stroke="currentColor" stroke-width="2">
 
 <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -508,6 +513,10 @@ fill="none" stroke="currentColor" stroke-width="2">
             <div><span class="badge-color" style="background-color:#7F8C8D;"></span> 行业资讯</div>
             <span class="stats">0</span>
         </li>
+		<li class="category-item">
+            <div><span class="badge-color" style="background-color:#C4A812;"></span> 公告张贴</div>
+            <span class="stats">0</span>
+        </li>
     </ul>
 </aside>
         </div>
@@ -518,6 +527,7 @@ fill="none" stroke="currentColor" stroke-width="2">
 ← 返回列表
 </a>
 
+<p class="current-tag"> 当前位置: <span id="nowtag"></span></p>
 <div class="thread-main" id="thread-main"></div>
 
 <div id="thread-content"></div>
@@ -622,7 +632,8 @@ const TAG_MAP = {
     7: {name:"项目/开源", color:"#27AE60"},
     8: {name:"数码/电脑", color:"#2C3E50"},
     9: {name:"游戏/水", color:"#F7941D"},
-    10: {name:"行业资讯", color:"#7F8C8D"}
+    10: {name:"行业资讯", color:"#7F8C8D"},
+    11: {name:"公告张贴", color:"#C4A812"}
 };
 
 const app = {
@@ -728,7 +739,7 @@ if(data.status===1){
     this.isLogin = true;
 
     const avatar = data.img || 
-    `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(data.user)}`;
+    `https://avatar.stalltrix.com/avatar?seed=${encodeURIComponent(data.user)}`;
 
     document.getElementById("user-avatar").src = avatar;
 	document.getElementById("newtopics").style.display="flex";
@@ -842,6 +853,10 @@ async loadIndex(){
         el.className="topic-item";
 
         const dateStr = new Date(item.lasttime*1000).toLocaleString();
+		let pageView = "-"
+		if (item.views && item.views != 0) {
+			pageView=String(item.views)
+		}
 		const tag = TAG_MAP[item.tag] || {name:"未知",color:"#999"};
 		let metaObj = null;
             try {
@@ -883,12 +898,12 @@ ${item.typeid}
 </div>
 
 <div class="posters">
-    <img src="${this.escape(getAvatar(metaObj,item))}" title="${displayName}" alt="${displayName}">
+    <img src="${this.escape(getAvatar(metaObj,item))}" title="${displayName}">
 </div>
 
 <div class="stats">${item.reply}</div>
 
-<div class="stats">-</div>
+<div class="stats">${pageView}</div>
 
 <div class="activity">${dateStr}</div>
 
@@ -907,6 +922,9 @@ ${item.typeid}
 async loadPost(hex){
 
     const container=document.getElementById("thread-content");
+	const mytag = document.getElementById('nowtag');
+	
+	fetch(`${this.apiBase}/view?topic=${hex}`).catch(()=>{});
 
     container.innerHTML="加载中";
 
@@ -915,6 +933,9 @@ async loadPost(hex){
     const data=await res.json();
 
     container.innerHTML="";
+	
+	const tag = TAG_MAP[data[0].tag] || {name:"未知",color:"#999"};
+	mytag.innerText = "/tag/"+tag.name+"("+String(data[0].tag)+")"
 
     data.forEach(item => {
 	
@@ -942,7 +963,10 @@ async loadPost(hex){
 
         if (metaObj.img) {
             avatar = `<img src="${this.escape(metaObj.img)}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
-        }
+        } else {
+			const seed = encodeURIComponent(ietm.own || "user0");
+			avatar = `<img src="https://avatar.stalltrix.com/avatar?seed=${seed}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
+		}
     }
 
     const el = document.createElement("div");
@@ -1048,10 +1072,17 @@ function getAvatar(item,ietm){
         return item.img;
     }
 
-    const seed = encodeURIComponent(ietm.user || "user0");
+    const seed = encodeURIComponent(ietm.own || "user0");
 
-    return `https://api.dicebear.com/7.x/micah/svg?seed=${seed}`;
+    return `https://avatar.stalltrix.com/avatar?seed=${seed}`;
 }
+const menuBtn = document.getElementById("menu-toggle");
+menuBtn.onclick = () => {
+    if(window.innerWidth > 768){
+        window.location.href = "/about";
+        return;
+    }
+};
 </script>
 
 </body>

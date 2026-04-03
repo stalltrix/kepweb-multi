@@ -2,7 +2,7 @@ package main
 
 import (
     "encoding/json"
-    "log"
+    "github.com/stalltrix/kep-demo/logger"
     "net/http"
     "strconv"
     "strings"
@@ -27,8 +27,10 @@ import (
 	"net/url"
 	"github.com/stalltrix/kep-cli/keygen"
 	"html/template"
+	"path/filepath"
 	"sort"
 	"github.com/stalltrix/kepweb/meta"
+	"sync/atomic"
 )
 
 type Reply struct {
@@ -57,6 +59,7 @@ type PostIndexView struct {
     Lasttime string `json:"lasttime"`
     Reply    int    `json:"reply"`
     Lastview string `json:"lastview"`
+	Views    int  `json:"views"`
 	Hex      string `json:"hex"`
 	Tag      uint16 `json:"tag"`
 	TypeId   byte `json:"typeid"`
@@ -118,9 +121,14 @@ var (
 	will_change_reply map[string]Reply
 	top_post PostIndexView //置顶帖子
 	echoMeta bool
+	logDebug logger.Log_TYPE
+	logInfo logger.Log_TYPE
+	logWarn logger.Log_TYPE
+	logErr logger.Log_TYPE
 	userInfo = make(map[string]UserInfo)
 	userLock sync.RWMutex
 	keyfile string
+	pageViews sync.Map
 )
 
 //go:embed static/*
@@ -205,11 +213,6 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 
     postHex := parts[2]
 	
-	if len(postHex)!=64{
-		http.Error(w, "post not found", http.StatusNotFound)
-        return
-	}
-	
 	if !IsHex(postHex){
 		http.Error(w, "post not found", http.StatusNotFound)
         return
@@ -241,6 +244,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
             w.WriteHeader(405)
             return
         }
+		req.Tag=0 //回帖恒为0
 		hash,_:=async_send(req,uinfo)
 		
 		replyID:=len(post.Replies)+1
@@ -420,6 +424,16 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 				metaData=metadata
 			}
 		}
+		
+		viewNum:=0
+		postKey, err := strconv.ParseInt(p.PostHex[:16], 16, 64)
+		if err==nil{
+			val,ok:=pageViews.Load(postKey)
+			if ok {
+				viewNum=int(*(val.(*int64)))
+			}
+		}
+
         resp = append(resp, PostIndexView{
             Own:      p.Owner,
             Lasttime: strconv.FormatInt(p.Replies[len(p.Replies)-1].Time, 10),
@@ -429,6 +443,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			Tag: p.TagID,
 			TypeId: p.TypeID,
 			Meta: metaData,
+			Views: viewNum,
         })
     }
 	
@@ -486,7 +501,7 @@ func async_send(payload ReplyRequest,uinfo *UserInfo) (string,error) {
 	} else {
 		bytes, err := hex.DecodeString(payload.Point_to)
 		if err != nil {
-			log.Println("send reply err:",err)
+			logErr.Println("send reply err:",err)
 			return "",err
 		}
 		pointTo = bytes
@@ -529,7 +544,7 @@ func async_send(payload ReplyRequest,uinfo *UserInfo) (string,error) {
 	go func(){
 	err = send.Nextmsg(msg,"")
 	if err != nil {
-		log.Println("send msg err:",err)
+		logErr.Println("send msg err:",err)
 	}
 	}()
 	return hashHex,nil
@@ -538,30 +553,30 @@ func async_send(payload ReplyRequest,uinfo *UserInfo) (string,error) {
 func loadData(tag string,renew bool){
 		hexs,err:=kepdb.ReadHash(tag)
 			if err ==nil {
-			txt,domain,timestamp,point_to,perm,key_des,_,tag_i,_,err:=kepresolv.Resolv(hexs)
+			txt,domain,timestamp,point_to,perm,key_des,_,_,_,tag_i,err:=kepresolv.Resolv(hexs)
 			if err !=nil {
-				log.Println("load data err:",err)
+				logWarn.Println("load data err:",err)
 				return;
 			}
 			if point_to != nil {
 				//回帖子内容，跳过
 				if !renew{
-					//log.Println("回帖子内容，跳过")
+					logDebug.Println("回帖子内容，跳过")
 				} else {
 					o_hex:=hex.EncodeToString(point_to)
 					o_hexs,err:=kepdb.ReadHash(o_hex)
 					if err!=nil {
-						log.Println("ERR: 找不到原始帖子",err)
+						logWarn.Println("ERR: 找不到原始帖子",err)
 						return
 					}
-					_,o_domain,_,_,_,o_key_des,_,o_tag_i,_,err:=kepresolv.Resolv(o_hexs)
+					_,o_domain,_,_,_,o_key_des,_,_,_,o_tag_i,err:=kepresolv.Resolv(o_hexs)
 					if err!=nil {
-						log.Println("ERR: 原始帖子err",err)
+						logErr.Println("ERR: 原始帖子err",err)
 						return
 					}
 					val,ok:=二维指针.Load(o_hex)
 					if !ok {
-						log.Println("drop wild point hex:",o_hex)
+						logWarn.Println("drop wild point hex:",o_hex)
 						return;
 					}
 					nowV:=val.(*map向量)
@@ -614,9 +629,9 @@ func loadData(tag string,renew bool){
 for _,sub := range subs {
 	hex_byte,err:=kepdb.ReadHash(sub)
 	if err ==nil {
- txt2,domain2,timestamp2,point_to2,perm2,key_des2,_,tagi2,_,err:=kepresolv.Resolv(hex_byte)
+ txt2,domain2,timestamp2,point_to2,perm2,key_des2,_,_,_,tagi2,err:=kepresolv.Resolv(hex_byte)
  if err !=nil {
-	log.Println("load data err:",err)
+	logInfo.Println("load data err:",err)
 	continue;
 	}
 	if tagi2 == 65534 {
@@ -686,7 +701,7 @@ for _,sub := range subs {
 }
 
 func initData() {
-	for i:=0;i<11;i++{
+	for i:=0;i<12;i++{
 		tags,err:=kepdb.ReadTag(i)
 		if err ==nil {
 			for _,tag := range tags {
@@ -698,9 +713,9 @@ func initData() {
 	for _,tag := range tags {
 	hexs,err:=kepdb.ReadHash(tag)
 	if err ==nil {
-	txt,domain,timestamp,point_to,_,key_des,_,tag_i,point_to_root,err:=kepresolv.Resolv(hexs)
+	txt,domain,timestamp,point_to,_,key_des,_,_,point_to_root,tag_i,err:=kepresolv.Resolv(hexs)
 			if err !=nil {
-				log.Println("load data err:",err)
+				logInfo.Println("load data err:",err)
 				continue;
 			}
 			if len(point_to_root)<4{
@@ -709,28 +724,28 @@ func initData() {
 		point_to_hex:=hex.EncodeToString(point_to)
 		hexbyte,err:=kepdb.ReadHash(point_to_hex)
 		if err!=nil{
-			log.Println("debug: point_to_hex not found",err)
+			logInfo.Println("debug: point_to_hex not found",err)
 			continue;
 		}
-		_,ori_domain,_,_,_,ori_key_des,_,_,_,err:=kepresolv.Resolv(hexbyte)
+		_,ori_domain,_,_,_,ori_key_des,_,_,_,_,err:=kepresolv.Resolv(hexbyte)
 		if err!=nil{
-			log.Println("debug: point msg not found",err)
+			logInfo.Println("debug: point msg not found",err)
 			continue;
 		}
 		if !(bytes.Equal(ori_domain,domain) && (ori_key_des==key_des)){
-			log.Println("mot match ori_ley",string(domain))
+			logInfo.Println("mot match ori_ley",string(domain))
 			continue;
 		}
 		
 		point_root:=hex.EncodeToString(point_to_root)
 		rootbyte,err:=kepdb.ReadHash(point_root)
 		if err!=nil{
-			log.Println("debug: point_to_root not found",err)
+			logInfo.Println("debug: point_to_root not found",err)
 			continue;
 		}
-		_,ori_domain_root,_,_,_,ori_key_des_root,_,_,_,err:=kepresolv.Resolv(rootbyte)
+		_,ori_domain_root,_,_,_,ori_key_des_root,_,_,_,_,err:=kepresolv.Resolv(rootbyte)
 		if err!=nil{
-			log.Println("debug: point root msg not found",err)
+			logInfo.Println("debug: point root msg not found",err)
 			continue;
 		}
 		nowRly,ok:=will_change_reply[point_to_hex]
@@ -775,7 +790,7 @@ func initData() {
 		}
 	}
 		}else{
-			log.Println("debug: post not found",k)
+			logInfo.Println("debug: post not found",k)
 		}
 	}
 	will_change_reply=nil
@@ -788,7 +803,7 @@ for {
 	newData:=renewData()
 	if newData !=nil {
 		for _,tag := range newData {
-			log.Println("debug: access msg:",tag)
+			logDebug.Println("debug: access msg:",tag)
 			loadData(tag,true)
 		}
 	}
@@ -799,14 +814,14 @@ func renewData() []string {
 	nodeUrlApi := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=msg&req=0&token="+token_UrlApi
 	resp, err := http.Get(nodeUrlApi)
 	if err != nil {
-		log.Println("task err:",err)
+		logWarn.Println("task err:",err)
 		return nil
 	}
 	defer resp.Body.Close()
 	var arr []string
 	err = json.NewDecoder(resp.Body).Decode(&arr)
 	if err != nil {
-		log.Println("decode json err:",err)
+		logWarn.Println("decode json err:",err)
 		return nil
 	}
 	return arr
@@ -842,7 +857,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	limiter := getLimiter(ipaddr)
     if !limiter.Allow() {
-        log.Println("WARN: Rate limit exceeded ,ip:", user_ip)
+        logInfo.Println("WARN: Rate limit exceeded ,ip:", user_ip)
         w.Write([]byte(`{"status":0}`))
 		return
     }
@@ -855,7 +870,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sess,err:=randSess(32)
 	if err !=nil {
-		log.Println(err)
+		logWarn.Println(err)
 		w.Write([]byte(`{"status":0}`))
         return
 	}
@@ -875,14 +890,14 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	time.AfterFunc(3600*24*15*time.Second, func() {
 		sessMap.Delete(sess)
 	})
-	w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"https://i.pravatar.cc/100"}`))
+	w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"https://avatar.stalltrix.com/avatar"}`))
 }
 
 func main() {
 	argc:=len(os.Args)
 	if argc <=1 {
-		log.Println("usage:")
-		log.Println("\twebserver [config.json] [logfile]")
+		logger.Print("usage:")
+		logger.Print("\twebserver [config.json] [logfile]")
 		return
 	}
 	cfg_file:=os.Args[1]
@@ -890,36 +905,54 @@ func main() {
 	
 	fileNewPost,err=os.ReadFile("markdown.html")
 	if err!=nil {
-		log.Fatalln("can't read markdown.html",err)
+		logger.Fatalln("can't read markdown.html",err)
 	}
 	
 	manager_tmpl,err=template.ParseFiles("manager.html")
 	if err!=nil {
-		log.Fatalln("can't read manager.html",err)
+		logger.Fatalln("can't read manager.html",err)
 	}
 	
 	cfg,err := config.Resolv(cfg_file)
 	if err!=nil {
-		log.Fatalln("can't read config.json",err)
+		logger.Fatalln("can't read config.json",err)
 	}
+	
+	if cfg.LogLevel == "" {
+		cfg.LogLevel="info"
+	}
+	
+    logger.SYS_Level(cfg.LogLevel)
+    logDebug.SetLevel("debug")
+    logInfo.SetLevel("info")
+    logWarn.SetLevel("warn")
+    logErr.SetLevel("err")
 	
 	fileIndex,err=os.ReadFile("ui.html")
 	if err!=nil {
-		log.Fatalln("can't read ui.html",err)
+		logger.Fatalln("can't read ui.html",err)
+	}
+	
+	exePath, err := os.Executable()
+    if err == nil {
+		kepdb.Init_path(filepath.Dir(exePath))
+    }else{
+		logger.Print("find self dir err: "+err.Error())
+		time.Sleep(time.Second*12)
 	}
 	
 	if cfg.Keyfile=="" {
-		log.Fatal("Err: keyfile is null")
+		logger.Fatal("Err: keyfile is null")
 	}
 	if len(cfg.ApiToken) < 8 {
-		log.Fatal("Err: token is null")
+		logger.Fatal("Err: token is null")
 	}
 	myself = cfg.Domain
 	token_UrlApi=cfg.ApiToken
 	echoMeta = cfg.Metaon
 	
 	if myself == "" {
-		log.Fatal("Err: myself is null")
+		logger.Fatal("Err: myself is null")
 	}
 	
 	nextroute=make([]send.NextMsg,len(cfg.Neighbors))
@@ -932,23 +965,28 @@ func main() {
 	
 	if cfg.Ntp != "" {
 		ntp.Ntp_Init(cfg.Ntp)
-		log.Println("start ntp client:",cfg.Ntp)
+		logWarn.Println("start ntp client:",cfg.Ntp)
 	}
 	
     mainPub, err = os.ReadFile(cfg.MainKey)
     if err != nil {
-       log.Fatal("Err: read user key err:",err)
+       logger.Fatalln("Err: read user key err:",err)
     }
 	mainPriv, err = os.ReadFile(cfg.Mainpriv)
 	if err != nil {
-		log.Fatal("Err: read user priv err:",err)
+		logger.Fatalln("Err: read user priv err:",err)
 	}
 	
 	keyfile = cfg.Keyfile
 	
 	err = loadUserInfo("userinfo.json")
 	if err!=nil{
-		log.Fatal("Err: read userinfo err:",err)
+		logger.Fatalln("Err: read userinfo err:",err)
+	}
+	
+	err=loadPageView("pageview.json")
+	if err!=nil{
+		logWarn.Println("WARN: read pageview err:",err)
 	}
 	
 	initData()
@@ -960,6 +998,7 @@ func main() {
 	http.HandleFunc("/index.php", indexpage)
 	http.HandleFunc("/t/topic/", indexpage)
 	http.HandleFunc("/manager", managerHandler)
+	http.HandleFunc("/view", viewpage)
 	
 	staticFS, _ := fs.Sub(staticFiles, "static")
 
@@ -970,7 +1009,7 @@ func main() {
     )
 	
 	if cfg.Listen == "" {
-		log.Fatal("Err: listen addr is null:")
+		logger.Fatal("Err: listen addr is null:")
 		return
 	}
 	
@@ -980,20 +1019,21 @@ func main() {
 		token_urlPort="10428"
 	}
 
-    log.Println("server started on: ",cfg.Listen)
+    logWarn.Println("server started on: ",cfg.Listen)
 	if argc >2 {
 	logfile:=os.Args[2]
 	logpath,err :=os.OpenFile(logfile,os.O_WRONLY|os.O_CREATE|os.O_APPEND,0644)
 	if err != nil {
-		log.Println(err)
+		logErr.Println(err)
 		return
 	}
-	log.SetOutput(logpath)
+	logger.SetOutput(logpath)
 	}
 	go auto_renew_data();
 	go auto_renew_csrf();
 	go meta.NewTTLMap()
-    log.Fatal(http.ListenAndServe(cfg.Listen, nil))
+	go autoSave()
+    logger.Fatalln(http.ListenAndServe(cfg.Listen, nil))
 }
 
 func managerHandler(w http.ResponseWriter, r *http.Request) {
@@ -1059,7 +1099,7 @@ case "list":{
 
     resp, err := http.Get(url)
     if err != nil {
-        io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+        io.WriteString(w, formatError(err))
         return
     }
 
@@ -1067,7 +1107,7 @@ case "list":{
     resp.Body.Close()
 
     if err != nil {
-        io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+        io.WriteString(w, formatError(err))
         return
     }
 
@@ -1082,7 +1122,7 @@ case "list":{
 
     err = json.Unmarshal(body,&api)
     if err != nil {
-        io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+        io.WriteString(w, formatError(err))
         return
     }
 
@@ -1128,12 +1168,16 @@ case "ban":{
 	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=ban&req="+url.QueryEscape(act)+"&token="+token_UrlApi
 	resp, err := http.Get(url)
 	if err != nil {
-		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+		io.WriteString(w, formatError(err))
 		return
 	}
-	io.Copy(io.Discard, resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	io.WriteString(w,`{"state":"OK"}`)
+	if err != nil {
+		io.WriteString(w, formatError(err))
+		return
+	}
+	io.WriteString(w,`{"state":"`+string(body)+`"}`)
 }
 case "unban":{
 	if strings.Contains(act, ":") {
@@ -1155,7 +1199,7 @@ case "unban":{
 		if !ok {
 			pub, priv, err:=keygen.Gen_pkey()
 			if err!=nil{
-				io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+				io.WriteString(w, formatError(err))
 				return
 			}
 			signKey:=keygen.Sig_pkey(pub, mainPriv)
@@ -1174,17 +1218,92 @@ case "unban":{
 	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=unban&req="+url.QueryEscape(act)+"&token="+token_UrlApi
 	resp, err := http.Get(url)
 	if err != nil {
-		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+		io.WriteString(w, formatError(err))
 		return
 	}
-	io.Copy(io.Discard, resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	io.WriteString(w,`{"state":"OK"}`)
+	if err != nil {
+		io.WriteString(w, formatError(err))
+		return
+	}
+	io.WriteString(w,`{"state":"`+string(body)+`"}`)
 }
 case "pmsg":{
 	//私信
 	//TODO:
 	io.WriteString(w,`{"state":"TODO..."}`)
+}
+case "resend":{
+	_,ok:=二维指针.Load(act)
+	if !ok {
+		io.WriteString(w,`{"state":"resend: post not found"}`)
+		return
+	}
+	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=resend&req="+url.QueryEscape(act)+"&token="+token_UrlApi
+	resp, err := http.Get(url)
+	if err != nil {
+		io.WriteString(w, formatError(err))
+		return
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		io.WriteString(w, formatError(err))
+		return
+	}
+	io.WriteString(w,`{"state":"`+string(body)+`"}`)
+}
+case "tag":{
+	//修改tag
+	allLook.RLock()
+    post_tag,ok:=postStore[act]
+	allLook.RUnlock()
+	if !ok {
+		io.WriteString(w,`{"state":"change-tag: post not found"}`)
+		return
+	}
+	if Ner_url == "" {
+		io.WriteString(w,`{"state":"new tag is null"}`)
+		return
+	}
+	new_tag,err:=strconv.Atoi(Ner_url)
+	if err!=nil{
+		io.WriteString(w, formatError(err))
+		return
+	}
+	if new_tag<0||new_tag>65535{
+		io.WriteString(w,`{"state":"new tag invalid"}`)
+		return
+	}
+	hexs,err:=kepdb.ReadHash(act)
+	if err!=nil{
+		io.WriteString(w, formatError(err))
+		return
+	}
+	files,err:=kepdb.FindALLFile(act + ".mdb")
+	if err!=nil{
+		io.WriteString(w, formatError(err))
+		return
+	}
+	
+	hex_len:=len(hexs)
+	if len(hexs) < 64 {
+		io.WriteString(w,`{"state":"data < 64"}`)
+		return
+	}
+	hexs[hex_len-3]= byte((new_tag>>8)&255)
+	hexs[hex_len-2]= byte(new_tag&255)
+	
+	err = os.WriteFile(files, hexs, 0644)
+	
+	if err!=nil{
+		io.WriteString(w, formatError(err))
+		return
+	}
+	
+	post_tag.TagID=uint16(new_tag)
+	io.WriteString(w,`{"state":"OK"}`)
 }
 case "top":{
 	//置顶
@@ -1204,6 +1323,14 @@ case "top":{
 			metaData=metadata
 		}
 	}
+	viewNum:=0
+	postKey, err := strconv.ParseInt(post_top.PostHex[:16], 16, 64)
+	if err==nil{
+		val,ok:=pageViews.Load(postKey)
+		if ok {
+			viewNum=int(*(val.(*int64)))
+		}
+	}
 	top_post=PostIndexView{
             Own:      post_top.Owner,
             Lasttime: strconv.FormatInt(post_top.Replies[len(post_top.Replies)-1].Time, 10),
@@ -1213,6 +1340,7 @@ case "top":{
 			Tag: post_top.TagID,
 			TypeId: post_top.TypeID,
 			Meta: metaData,
+			Views: viewNum,
         }
 	io.WriteString(w,`{"state":"set-top: OK"}`)
 }
@@ -1243,20 +1371,20 @@ case "delmsg":{
 		if del_ok {
 		path,err:=kepdb.FindALLFile(act + ".mdb")
 		if err!=nil {
-			log.Println("del post err:",err)
+			logErr.Println("del post err:",err)
 		}else{
 			os.Remove(path)
 			if is_root {
 				path2,err:=kepdb.FindFile(act + ".txt")
 				if err!=nil {
-					log.Println("del idx err:",err)
+					logErr.Println("del idx err:",err)
 				}else{
 					subs,err:=kepdb.ReadSub(act)
 					if err ==nil {
 						for _,sub := range subs {
 							sub_path,err:=kepdb.FindALLFile(sub + ".mdb")
 							if err != nil {
-								log.Println("del sub err:",err)
+								logErr.Println("del sub err:",err)
 							}else{
 								os.Remove(sub_path)
 							}
@@ -1286,13 +1414,13 @@ case "add_neighbor":{
 	url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=neighbor&req=set&key="+url.QueryEscape(act)+"&token="+token_UrlApi+"&url="+url.QueryEscape(Ner_url)+"&rpm="+strconv.Itoa(user.RPM)
 	resp, err := http.Get(url)
 	if err != nil {
-		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+		io.WriteString(w, formatError(err))
 		return
 	}
 	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+		io.WriteString(w, formatError(err))
 		return
 	}
 	io.WriteString(w,`{"state":"`+string(body)+`"}`)
@@ -1311,13 +1439,13 @@ case "del_neighbor":{
     url := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=neighbor&req=del&key="+url.QueryEscape(realKey)+"&token="+token_UrlApi
 	resp, err := http.Get(url)
 	if err != nil {
-		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+		io.WriteString(w, formatError(err))
 		return
 	}
 	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		io.WriteString(w,`{"state":"`+err.Error()+`"}`)
+		io.WriteString(w, formatError(err))
 		return
 	}
 	io.WriteString(w,`{"state":"`+string(body)+`"}`)
@@ -1426,6 +1554,41 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
     w.Write(fileIndex)
 }
 
+func viewpage(w http.ResponseWriter, r *http.Request) {
+	// api GET /poll?topic={hex}
+	query := r.URL.Query()
+    topic := query.Get("topic")
+	w.Header().Set("Content-Type", "application/json")
+	if !IsHex(topic) {
+		w.Write([]byte(`{"state":0}`))
+		return
+	}
+	allLook.RLock()
+    _,ok := postStore[topic]
+	allLook.RUnlock()
+	if !ok{
+		w.Write([]byte(`{"state":0}`))
+		return
+	}
+	postKey, err := strconv.ParseInt(topic[:16], 16, 64)
+	if err!=nil{
+		logErr.Println("ParseInt err:",err)
+		w.Write([]byte(`{"state":0}`))
+		return
+	}
+	var now_view *int64
+	val,ok:=pageViews.Load(postKey)
+	if ok {
+		now_view=val.(*int64)
+	} else {
+		var num int64
+		v, _ := pageViews.LoadOrStore(postKey, &num)
+		now_view = v.(*int64)
+	}
+	atomic.AddInt64(now_view, 1)
+	w.Write([]byte(`{"state":0}`))
+}
+
 func genPanelToken(token string) string {
 	var b [2]byte
 	rand.Read(b[:])
@@ -1505,10 +1668,14 @@ if req.Tag == 65534 {
 
 func autoSave(){
 for{
-	time.Sleep(time.Second*300)
+	time.Sleep(time.Second*600)
 	err := saveUserInfo("userinfo.json")
 	if err!=nil{
-		log.Println("err: save user task:",err)
+		logInfo.Println("err: save user task:",err)
+	}
+	err = savePageView("pageview.json")
+	if err!=nil{
+		logInfo.Println("err: save view task:",err)
 	}
 }
 }
@@ -1576,4 +1743,65 @@ func saveUserInfo(filename string) error {
         return err
     }
 	return nil
+}
+
+func savePageView(filename string) error {
+	tmp:=make(map[int64]int64)
+    pageViews.Range(func(k, v interface{}) bool {
+		key:=k.(int64)
+		val:=v.(*int64)
+        tmp[key]=*val
+        return true
+    })
+	
+    file, err := os.Create(filename)
+    if err != nil {
+		return err
+    }
+    err = json.NewEncoder(file).Encode(tmp)
+	file.Close()
+    if err != nil {
+        return err
+    }
+	return nil
+}
+
+func loadPageView(filename string) error {
+	file, err := os.Open(filename)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+	
+	tmp:=make(map[string]int64)
+	
+    err = json.NewDecoder(file).Decode(&tmp)
+    if err != nil {
+        return err
+    }
+
+    for k, v := range tmp {
+        ki, err := strconv.ParseInt(k, 10, 64)
+        if err != nil {
+            return err
+        }
+		val:=v
+        pageViews.Store(ki, &val)
+    }
+    return nil
+}
+
+func formatError(err error) string {
+    msg := ""
+    if err != nil {
+        msg = err.Error()
+    }
+
+    b,_:= json.Marshal(struct {
+        State string `json:"state"`
+    }{
+        State: msg,
+    })
+
+    return string(b)
 }

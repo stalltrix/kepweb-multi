@@ -131,6 +131,7 @@ input,textarea{
 <li><a onclick="showPanel('message')">私信</a></li>
 <li><a onclick="showPanel('post')">帖子管理</a></li>
 <li><a onclick="showPanel('toppost')">置顶管理</a></li>
+<li><a onclick="showPanel('changetag')">分类管理</a></li>
 </ul>
 
 </div>
@@ -142,7 +143,7 @@ input,textarea{
 
 <div class="card">
 
-<h3>封禁域名</h3>
+<h3>封禁域名 PSL</h3>
 
 <input id="banDomain" placeholder="输入域名 example.com">
 
@@ -170,6 +171,7 @@ input,textarea{
 
 <input id="neighborInput" placeholder="输入 neighbor token">
 <input id="neighborURL" placeholder="输入 neighbor URL">
+<input id="neighborRPM" placeholder="输入 neighbor RPM" value="300">
 
 <button class="btn" onclick="addNeighbor()">添加邻居</button> 
 </div>
@@ -215,12 +217,12 @@ input,textarea{
 
 <div class="card">
 
-<h3>删除帖子</h3>
+<h3>删除帖子/重发帖子</h3>
 
 <input id="postID" placeholder="输入帖子ID">
 
 <button class="btn btn-danger" onclick="delPost()">删除</button>
-
+<button class="btn" onclick="resendPost()">重发</button>
 </div>
 
 </div>
@@ -237,6 +239,20 @@ input,textarea{
 </div>
 
 </div>
+<div id="changetag" class="panel" style="display:none">
+
+<div class="card">
+
+<h3>修改分类</h3>
+
+<input id="tagPostID" placeholder="输入帖子ID">
+<input id="tagval" placeholder="新标签(数字)">
+
+<button class="btn" onclick="tagPost()">修改</button>
+
+</div>
+
+</div>
 </div>
 
 </div>
@@ -246,14 +262,14 @@ input,textarea{
 
 const API="/manager"
 
-function api(req,act,url=""){
+function api(req,act,url="",rpm=0){
 let manager_csrf="{{ .Tokenk1 }}"
 return fetch(API,{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
 },
-body:JSON.stringify({req:req,act:act,url:url,csrf:manager_csrf})
+body:JSON.stringify({req:req,act:act,url:url,csrf:manager_csrf,rpm:rpm})
 }).then(r=>r.json())
 }
 
@@ -303,13 +319,16 @@ function addNeighbor(){
 
 const token=document.getElementById("neighborInput").value.trim()
 const url=document.getElementById("neighborURL").value.trim()
+const rpm=document.getElementById("neighborRPM").value.trim()
 
-if(!token || !url){
-alert("请输入token和url")
+if(!token || !url || !rpm){
+alert("请输入token和url和rpm")
 return
 }
 
-api("add_neighbor",token,url).then(res=>{
+let rpm_n = parseInt(rpm, 10);
+
+api("add_neighbor",token,url,rpm_n).then(res=>{
 
 if(res.state==="OK"){
 alert("添加成功")
@@ -389,6 +408,25 @@ alert(res.state)
 
 }
 
+function resendPost(){
+
+const id=document.getElementById("postID").value.trim()
+
+if(!id){
+alert("请输入帖子ID")
+return
+}
+
+if(!confirm("确定重新广播该帖子？")){
+return
+}
+
+api("resend",id).then(res=>{
+alert(res.state)
+})
+
+}
+
 function topPost(){
 
 const id=document.getElementById("topPostID").value.trim()
@@ -399,6 +437,22 @@ return
 }
 
 api("top",id).then(res=>{
+alert(res.state)
+})
+
+}
+
+function tagPost(){
+
+const id=document.getElementById("tagPostID").value.trim()
+const newtag=document.getElementById("tagval").value.trim()
+
+if(!id || !newtag){
+alert("请输入帖子ID与新标签")
+return
+}
+
+api("tag",id,newtag).then(res=>{
 alert(res.state)
 })
 

@@ -17,6 +17,7 @@ type Config struct {
     Domain    string     `json:"domain"`
 	ApiToken     string     `json:"api_token"`
 	Apiport     string     `json:"api_port"`
+	LogLevel string      `json:"log_level"`
 	Metaon    bool      `json:"meta_on"`
 	Listen    string     `json:"listen"`
 	Ntp    string     `json:"ntp"`
