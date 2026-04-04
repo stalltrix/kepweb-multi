@@ -923,8 +923,6 @@ async loadPost(hex){
 
     const container=document.getElementById("thread-content");
 	const mytag = document.getElementById('nowtag');
-	
-	fetch(`${this.apiBase}/view?topic=${hex}`).catch(()=>{});
 
     container.innerHTML="加载中";
 
@@ -946,7 +944,8 @@ async loadPost(hex){
         }
     } catch(e) {}
 
-    let displayName = this.escape(item.user);
+    const dateStr = new Date(item.post_time * 1000).toLocaleString();
+	let displayName = this.escape(item.user);
     let userSuffix = "";
     let avatar = "";
     let metaId = this.escape(item.meta);
@@ -964,7 +963,7 @@ async loadPost(hex){
         if (metaObj.img) {
             avatar = `<img src="${this.escape(metaObj.img)}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
         } else {
-			const seed = encodeURIComponent(ietm.own || "user0");
+			const seed = encodeURIComponent(displayName);
 			avatar = `<img src="https://avatar.stalltrix.com/avatar?seed=${seed}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
 		}
     }
@@ -977,7 +976,8 @@ async loadPost(hex){
 
             <div class="comment-user">
                 ${avatar}<span class="comment-id">#${item.id}</span>
-                ${displayName} ${userSuffix}
+                ${displayName} ${userSuffix}  
+				<span style="font-size:12px;color:#999"> · ${dateStr}</span>
             </div>
 
             <div class="comment-meta">
@@ -1067,13 +1067,16 @@ window.onpopstate = function(e){
 
 };
 function getAvatar(item,ietm){
-
     if(item && item.img && item.img.trim() !== ""){
         return item.img;
     }
-
-    const seed = encodeURIComponent(ietm.own || "user0");
-
+	let displayName = this.escape(ietm.own);
+    if (item) {
+        if (item.name) {
+            displayName = this.escape(item.name);
+        }
+	}
+    const seed = encodeURIComponent(displayName);
     return `https://avatar.stalltrix.com/avatar?seed=${seed}`;
 }
 const menuBtn = document.getElementById("menu-toggle");
