@@ -30,29 +30,11 @@ import (
 	"path/filepath"
 	"sort"
 	"github.com/stalltrix/kepweb/meta"
+	"github.com/stalltrix/kepweb/notify"
+	"github.com/stalltrix/kepweb/postdb"
+	"github.com/stalltrix/kepweb/postcodec"
 	"sync/atomic"
 )
-
-type Reply struct {
-    ID   int    `json:"id"`
-    User string `json:"user"`
-    Meta string `json:"meta"`
-    Me   bool   `json:"me"`
-    Post string `json:"post"`
-    Time int64  `json:"post_time"`
-	Tag  uint16  `json:"tag"`
-	Hex string  `json:"hex"`
-	MetaTime int64 `json:"-"`
-}
-
-type Post struct {
-    PostHex  string
-    TagID    uint16
-    Owner    string
-    Replies  []Reply
-    LastTime int64
-	TypeID byte
-}
 
 type PostIndexView struct {
     Own      string `json:"own"`
@@ -98,10 +80,9 @@ type UserInfo struct {
 }
 
 var (
-    postStore = make(map[string]*Post)
+    dbStore *postdb.DataHandle
 	fileIndex []byte
 	fileNewPost []byte
-	allLook   sync.RWMutex
 	sessMap sync.Map
 	myself string
 	nextroute []send.NextMsg
@@ -118,13 +99,16 @@ var (
 	neighborTokenMap sync.Map
 	manager_csrf string
 	manager_tmpl *template.Template
-	will_change_reply map[string]Reply
+	will_change_reply map[string]postcodec.Reply
 	top_post PostIndexView //置顶帖子
 	echoMeta bool
 	logDebug logger.Log_TYPE
 	logInfo logger.Log_TYPE
 	logWarn logger.Log_TYPE
 	logErr logger.Log_TYPE
+	selfdir string
+	patch_perm sync.Map
+	patch_file string
 	userInfo = make(map[string]UserInfo)
 	userLock sync.RWMutex
 	keyfile string
@@ -218,9 +202,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         return
 	}
 	
-	allLook.RLock()
-    post, ok := postStore[postHex]
-	allLook.RUnlock()
+	post, ok := dbStore.Load(postHex)
 	
     if !ok {
         http.Error(w, "post not found", http.StatusNotFound)
@@ -234,6 +216,11 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	
 	if !is_login {
 		if post.TypeID != 0 {
+			http.Error(w, "post not found", http.StatusNotFound)
+			return
+		}
+		_,ok:=patch_perm.Load(postHex)
+		if ok {
 			http.Error(w, "post not found", http.StatusNotFound)
 			return
 		}
@@ -253,8 +240,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 		hash,_:=async_send(req,uinfo)
 		
 		replyID:=len(post.Replies)+1
-		allLook.Lock()
-		reply := Reply{
+		reply := postcodec.Reply{
             ID:   replyID,
             User: uinfo.Name,
             Meta: "",
@@ -266,12 +252,15 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         }
 		post.Replies = append(post.Replies, reply)
         post.LastTime = reply.Time
-		allLook.Unlock()
 		newV:=&map向量{
 			x: post.Replies[0].Hex,
 			y: replyID-1,
 		}
-		二维指针.Store(hash,newV)
+		var out [32]byte
+		if !hex64To32(&out, hash){
+			logErr.Println("format hash err:",hash)
+		}
+		二维指针.Store(out,newV)
 		sortList[sortIdx]=post.Replies[0].Hex
 		sortIdx++
 		
@@ -357,10 +346,9 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
-	var posts []*Post
+	var posts []*postcodec.Post
 	{
 	diff :=make(map[string]bool)
-	allLook.RLock()
 	i:=sortIdx
 	for j:=0;j<2048;j++{
 		i--
@@ -373,7 +361,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			if ok {
 				continue
 			}
-			post, ok := postStore[hex]
+			post, ok := dbStore.Load(hex)
 			if ok {
 				diff[hex]=false
 				posts = append(posts, post)
@@ -387,7 +375,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			if ok {
 				continue
 			}
-			post, ok := postStore[hex]
+			post, ok := dbStore.Load(hex)
 			if ok {
 				if int(post.TagID)==tag {
 					diff[hex]=false
@@ -396,7 +384,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	allLook.RUnlock()
 	}
 
     start := (pageIdx - 1) * 16
@@ -573,7 +560,7 @@ func loadData(tag string,renew bool){
 			if point_to != nil {
 				//回帖子内容，跳过
 				if !renew{
-					logDebug.Println("回帖子内容，跳过")
+					//logDebug.Println("回帖子内容，跳过")
 				} else {
 					o_hex:=hex.EncodeToString(point_to)
 					o_hexs,err:=kepdb.ReadHash(o_hex)
@@ -589,33 +576,36 @@ func loadData(tag string,renew bool){
 						logErr.Println("ERR: 原始帖子err",err)
 						return
 					}
-					val,ok:=二维指针.Load(o_hex)
+					var out [32]byte
+					if !hex64To32(&out, o_hex){
+						logWarn.Println("drop wild point hex:",o_hex)
+						return;
+					}
+					val,ok:=二维指针.Load(out)
 					if !ok {
 						logWarn.Println("drop wild point hex:",o_hex)
 						return;
 					}
 					nowV:=val.(*map向量)
-					allLook.RLock()
-					o_post,ok:=postStore[nowV.x]
-					allLook.RUnlock()
+					o_post,ok:=dbStore.Load(nowV.x)
 				if ok {
 					if tag_i == 65534 {
 						if (key_des == o_key_des) && bytes.Equal(domain,o_domain){
 						if nowV.y == 0 {
 						if timestamp > o_post.Replies[0].Time{
 							o_post.TypeID=byte(perm & 255)
-							o_post.Replies[0]=Reply{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
+							o_post.Replies[0]=postcodec.Reply{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
 						}}else {
 							if len(o_post.Replies)>nowV.y{
 								if timestamp > o_post.Replies[nowV.y].Time{
-								o_post.Replies[nowV.y]=Reply{ID: nowV.y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
+								o_post.Replies[nowV.y]=postcodec.Reply{ID: nowV.y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
 								}
 							}
 						}}
 						return
 					}
 						lastID:=len(o_post.Replies)
-						o_post.Replies = append(o_post.Replies, Reply{
+						o_post.Replies = append(o_post.Replies, postcodec.Reply{
     ID:   lastID,
     User: string(domain),
     Meta: "",
@@ -630,14 +620,18 @@ func loadData(tag string,renew bool){
 		y: lastID,
 	}
 	lastID++
-	二维指针.Store(tag,newV)
+	var out [32]byte
+	if !hex64To32(&out, tag){
+		logErr.Println("format hash err:",tag)
+	}
+	二维指针.Store(out,newV)
 	sortList[sortIdx]=o_hex
 	sortIdx++
 				}
 				}
 				return;
 			}
-			var newRly = []Reply{{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: tag_i, Hex: tag},}
+			var newRly = []postcodec.Reply{{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: tag_i, Hex: tag},}
 			var lastID=2
 			subs,err:=kepdb.ReadSub(tag)
 			if err ==nil {
@@ -662,7 +656,7 @@ for _,sub := range subs {
 		if (key_des == key_des2) && bytes.Equal(domain,domain2) {
 			//本人
 			if timestamp2 > newRly[0].Time{
-			newRly[0]=Reply{
+			newRly[0]=postcodec.Reply{
     ID:   1,
     User: string(domain2),
     Meta: "",
@@ -677,7 +671,7 @@ for _,sub := range subs {
 		}
 		continue;
 	}
- newRly = append(newRly, Reply{
+ newRly = append(newRly, postcodec.Reply{
     ID:   lastID,
     User: string(domain2),
     Meta: "",
@@ -691,7 +685,11 @@ for _,sub := range subs {
 		x: tag,
 		y: lastID-1,
 	}
-	二维指针.Store(sub,newV)
+	var out [32]byte
+	if !hex64To32(&out, sub){
+		logErr.Println("format hash err:",sub)
+	}
+	二维指针.Store(out,newV)
  lastID++
 	}
 }
@@ -702,21 +700,23 @@ for _,sub := range subs {
 		}
 		return newRly[i].Time < newRly[j].Time
 	})	
-	allLook.Lock()
-    postStore[tag] = &Post{
+    dbStore.Store(tag,&postcodec.Post{
         PostHex: tag,
         TagID:   tag_i,
         Owner:   string(domain),
         LastTime: timestamp,
         Replies: newRly,
 		TypeID: perm,
-    }
-	allLook.Unlock()
+    })
 	newV:=&map向量{
 		x: tag,
 		y: 0,
 	}
-	二维指针.Store(tag,newV)
+	var out [32]byte
+	if !hex64To32(&out, tag){
+		logErr.Println("format hash err:",tag)
+	}
+	二维指针.Store(out,newV)
 	sortList[sortIdx]=tag
 	sortIdx++
 		}
@@ -726,12 +726,16 @@ func initData() {
 	for i:=0;i<12;i++{
 		tags,err:=kepdb.ReadTag(i)
 		if err ==nil {
+			err=notify.Reg_fs(i,callback_renew)
+			if err!=nil {
+				logWarn.Println("reg tag err:",err)
+			}
 			for _,tag := range tags {
 				loadData(tag,false);}}
 	}
 	tags,err:=kepdb.ReadTag(65534)
 	if err ==nil {
-	will_change_reply=make(map[string]Reply);
+	will_change_reply=make(map[string]postcodec.Reply);
 	for _,tag := range tags {
 	hexs,err:=kepdb.ReadHash(tag)
 	if err ==nil {
@@ -783,7 +787,7 @@ func initData() {
 		}
 		nowRly,ok:=will_change_reply[point_to_hex]
 		if !ok {
-	will_change_reply[point_to_hex]=Reply{
+	will_change_reply[point_to_hex]=postcodec.Reply{
     ID:   0,
     User: string(domain),
     Meta: "",
@@ -795,7 +799,7 @@ func initData() {
 	}
 	}else{
 		if timestamp > nowRly.Time{
-	will_change_reply[point_to_hex]=Reply{
+	will_change_reply[point_to_hex]=postcodec.Reply{
     ID:   0,
     User: string(domain),
     Meta: "",
@@ -808,12 +812,15 @@ func initData() {
 		}
 	}}}
 	for k,v:=range will_change_reply {
-		val,ok:=二维指针.Load(k)
+	var out [32]byte
+	if !hex64To32(&out, k){
+		logErr.Println("format hash err:",k)
+		continue
+	}
+		val,ok:=二维指针.Load(out)
 		if ok {
 			nowV:=val.(*map向量)
-	allLook.RLock()
-    post,ok:=postStore[nowV.x]
-	allLook.RUnlock()
+    post,ok:=dbStore.Load(nowV.x)
 	if ok {
 		if len(post.Replies)>nowV.y{
 			if post.Replies[nowV.y].Time < v.Time {
@@ -829,6 +836,10 @@ func initData() {
 	will_change_reply=nil
 	}
 	
+	err=notify.Reg_fs(65534,callback_renew)
+	if err!=nil {
+		logWarn.Println("reg tag err:",err)
+	}
 	sort.Slice(sortList[:sortIdx], func(i, j int) bool {
 		if sortList[i]==""||sortList[j]==""{
 			return false
@@ -841,41 +852,54 @@ func getpostTime(hex string) int64 {
 	if hex == "" {
 		return 0
 	}
-	post, ok := postStore[hex]
+	post, ok := dbStore.Load(hex)
 	if ok {
 		return post.LastTime
 	}
 	return 0
 }
 
-func auto_renew_data(){
-for {
-	time.Sleep(time.Second * 30)
-	newData:=renewData()
-	if newData !=nil {
-		for _,tag := range newData {
-			logDebug.Println("debug: access msg:",tag)
-			loadData(tag,true)
-		}
-	}
-}
-}
+func callback_renew(tag_id int){
+    idxPath := filepath.Join(selfdir, "tag_"+strconv.Itoa(tag_id)+".idx")
+    f, err := os.Open(idxPath)
+    if err != nil {
+		logWarn.Println("renew err:",err)
+        return
+    }
+    defer f.Close()
 
-func renewData() []string {
-	nodeUrlApi := "http://127.222.1.16:"+token_urlPort+"/local/api/interface?svc=msg&req=0&token="+token_UrlApi
-	resp, err := http.Get(nodeUrlApi)
-	if err != nil {
-		logWarn.Println("task err:",err)
-		return nil
-	}
-	defer resp.Body.Close()
-	var arr []string
-	err = json.NewDecoder(resp.Body).Decode(&arr)
-	if err != nil {
-		logWarn.Println("decode json err:",err)
-		return nil
-	}
-	return arr
+    stat, err := f.Stat()
+    if err != nil {
+		logWarn.Println("renew err:",err)
+        return
+    }
+
+    size := stat.Size()
+	
+	const lineSize = 65
+
+    for offset := size - lineSize; offset >= 0; offset -= lineSize {
+        buf := make([]byte, lineSize)
+
+        _, err := f.ReadAt(buf, offset)
+        if err != nil && err != io.EOF {
+			logWarn.Println("renew err:",err)
+            return
+        }
+		tag:=string(buf[:64])
+		var out [32]byte
+		if !hex64To32(&out, tag){
+			logDebug.Println("debug: renew endof:",tag)
+			return
+		}
+		_,ok:=二维指针.Load(out)
+		if ok {
+			logDebug.Println("debug: renew endof:",tag)
+			return
+		}
+		logDebug.Println("debug: renew data:",tag)
+        loadData(tag,true)
+    }
 }
 
 func meHandler(w http.ResponseWriter, r *http.Request) {
@@ -984,10 +1008,14 @@ func main() {
 		logger.Fatalln("can't read ui.html",err)
 	}
 	
+	self:=""
 	exePath, err := os.Executable()
     if err == nil {
-		kepdb.Init_path(filepath.Dir(exePath))
+		self = filepath.Dir(exePath)
+		kepdb.Init_path(self)
+		selfdir=filepath.Join(self, "kep-data")
     }else{
+		selfdir="kep-data"
 		logger.Print("find self dir err: "+err.Error())
 		time.Sleep(time.Second*12)
 	}
@@ -1004,6 +1032,14 @@ func main() {
 	
 	if myself == "" {
 		logger.Fatal("Err: myself is null")
+	}
+	
+	if cfg.Dbfile == ""{
+		cfg.Dbfile=filepath.Join(os.TempDir(), "db-")
+	}
+	dbStore,err=postdb.Open(cfg.Dbfile,cfg.DbAddr,cfg.DbPass)
+	if err != nil {
+		logger.Fatalln("Err: open db err:",err)
 	}
 	
 	nextroute=make([]send.NextMsg,len(cfg.Neighbors))
@@ -1040,6 +1076,7 @@ func main() {
 		logWarn.Println("WARN: read pageview err:",err)
 	}
 	
+	notify.Init_path(self)
 	initData()
 	
     http.HandleFunc("/view/", viewHandler)
@@ -1065,8 +1102,18 @@ func main() {
 	
 	token_urlPort = cfg.Apiport
 	
+	notify.Done()
 	if token_urlPort == "" {
 		token_urlPort="10428"
+	}
+	
+	patch_file=cfg.Permfile
+	if patch_file=="" {
+		patch_file=filepath.Join(self, "perm.ini")
+	}
+	err=pbbLoad()
+	if err != nil {
+		logWarn.Println("Warn: load perm file:",err)
 	}
 
     logWarn.Println("server started on: ",cfg.Listen)
@@ -1079,10 +1126,10 @@ func main() {
 	}
 	logger.SetOutput(logpath)
 	}
-	go auto_renew_data();
 	go auto_renew_csrf();
 	go meta.NewTTLMap()
 	go autoSave()
+	go startLimiterCleaner()
     logger.Fatalln(http.ListenAndServe(cfg.Listen, nil))
 }
 
@@ -1164,6 +1211,7 @@ case "list":{
     type ApiResp struct{
         State string   `json:"state"`
         Data  []string `json:"data"`
+		Url   []string `json:"url"`
     }
 
     var api ApiResp
@@ -1190,9 +1238,11 @@ case "list":{
     out := struct{
         State string   `json:"state"`
         Data  []string `json:"data"`
+		Url   []string `json:"url"`
     }{
         State:"OK",
         Data:result,
+		Url:api.Url,
     }
 
     w.Header().Set("Content-Type","application/json")
@@ -1227,6 +1277,7 @@ case "ban":{
 		io.WriteString(w, formatError(err))
 		return
 	}
+	logWarn.Println("[management log] ban domain:"+act+" reason:"+Ner_url)
 	io.WriteString(w,`{"state":"`+string(body)+`"}`)
 }
 case "unban":{
@@ -1284,8 +1335,54 @@ case "pmsg":{
 	//TODO:
 	io.WriteString(w,`{"state":"TODO..."}`)
 }
+case "perm":{
+	_,ok:=dbStore.Load(act)
+	if !ok {
+		io.WriteString(w,`{"state":"set-perm: post not found"}`)
+		return
+	}
+	if Ner_url != "0" && Ner_url != "1" {
+		io.WriteString(w,`{"state":"new perm is null"}`)
+		return
+	}
+	//管理员界面，先默认无并发。以后再完善
+	if Ner_url == "0" {
+		//remove
+		_,ok=patch_perm.Load(act)
+		if ok {
+			err = removeKey(act)
+			if err != nil {
+				io.WriteString(w, formatError(err))
+				return
+			}
+			patch_perm.Delete(act)
+		}
+	} else {
+		//add
+		f,err:= os.OpenFile(patch_file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			io.WriteString(w, formatError(err))
+			return
+		}
+		_, err = f.WriteString(act+":1\n")
+		if err != nil {
+			f.Close()
+			io.WriteString(w, formatError(err))
+			return
+		}
+		f.Close()
+		patch_perm.Store(act,struct{}{})
+	}
+	io.WriteString(w,`{"state":"set-perm: OK"}`)
+}
 case "resend":{
-	_,ok:=二维指针.Load(act)
+	var out [32]byte
+	if !hex64To32(&out, act){
+		logErr.Println("format hash err:",act)
+		io.WriteString(w,`{"state":"resend: post not found"}`)
+		return
+	}
+	_,ok:=二维指针.Load(out)
 	if !ok {
 		io.WriteString(w,`{"state":"resend: post not found"}`)
 		return
@@ -1306,9 +1403,7 @@ case "resend":{
 }
 case "tag":{
 	//修改tag
-	allLook.RLock()
-    post_tag,ok:=postStore[act]
-	allLook.RUnlock()
+	post_tag,ok:=dbStore.Load(act)
 	if !ok {
 		io.WriteString(w,`{"state":"change-tag: post not found"}`)
 		return
@@ -1357,9 +1452,7 @@ case "tag":{
 }
 case "top":{
 	//置顶
-	allLook.RLock()
-	post_top,ok:=postStore[act]
-	allLook.RUnlock()
+	post_top,ok:=dbStore.Load(act)
 	if !ok {
 		io.WriteString(w,`{"state":"set-top: post not found"}`)
 		return
@@ -1397,19 +1490,21 @@ case "top":{
 case "delmsg":{
 	del_ok:=false
 	is_root:=false
-	val,ok:=二维指针.Load(act)
+	var out [32]byte
+	if !hex64To32(&out, act){
+		logErr.Println("format hash err:",act)
+		io.WriteString(w,`{"state":"del post not found"}`)
+		return
+	}
+	val,ok:=二维指针.Load(out)
 	if ok {
 		nowV:=val.(*map向量)
 		if nowV.y==0{
-	allLook.Lock()
-    _,ok=postStore[nowV.x]
-	if ok {delete(postStore,nowV.x);del_ok=true;}
-	allLook.Unlock()
+	_,ok=dbStore.Load(nowV.x)
+	if ok {dbStore.Delete(nowV.x);del_ok=true;}
 	is_root=true
 		}else{
-	allLook.RLock()
-    post,ok:=postStore[nowV.x]
-	allLook.RUnlock()
+	post,ok:=dbStore.Load(nowV.x)
 	if ok {
 		del_ok=true;
 		if len(post.Replies)>nowV.y{
@@ -1654,46 +1749,51 @@ func sendNewPost(txt string,tag,typeid int,point_to,point_to_root string,uinfo *
 		return
 	}
 	timestamp:=int64(time.Now().Unix())
-	var newRly = []Reply{{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: uint16(req.Tag), Hex: hash},}
+	var newRly = []postcodec.Reply{{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: uint16(req.Tag), Hex: hash},}
 	
 if req.Tag == 65534 {
-	val,ok:=二维指针.Load(point_to)
+	var out [32]byte
+	if !hex64To32(&out, point_to){
+		logErr.Println("format hash err:",point_to)
+		return
+	}
+	val,ok:=二维指针.Load(out)
 	if !ok {
 		return
 	}
 	NowV:=val.(*map向量)
-	allLook.RLock()
-	o_post,ok:=postStore[NowV.x]
-	allLook.RUnlock()
+	o_post,ok:=dbStore.Load(NowV.x)
 	if ok {
 		if NowV.y==0{
 		if o_post.Owner == uinfo.Name{
 		o_tag:=o_post.Replies[0].Tag
 		o_post.TypeID=byte(typeid & 255)
-		o_post.Replies[0]=Reply{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
+		o_post.Replies[0]=postcodec.Reply{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
 		}}else{
 			if len(o_post.Replies)>NowV.y{
 		o_tag:=o_post.Replies[NowV.y].Tag
-		o_post.Replies[NowV.y]=Reply{ID: NowV.y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
+		o_post.Replies[NowV.y]=postcodec.Reply{ID: NowV.y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
 			}
 		}
 	}
 }else{
-	allLook.Lock()
-	postStore[hash] = &Post{
+	dbStore.Store(hash,&postcodec.Post{
         PostHex: hash,
         TagID:   uint16(tag),
         Owner:   uinfo.Name,
         LastTime: timestamp,
         Replies: newRly,
 		TypeID: byte(typeid & 255),
-	}
-	allLook.Unlock()
+	})
 	newV:=&map向量{
 		x: hash,
 		y: 0,
 	}
-	二维指针.Store(hash,newV)
+	var out [32]byte
+	if !hex64To32(&out, hash){
+		logErr.Println("format hash err:",hash)
+	}
+	二维指针.Store(out,newV)
 }
 	sortList[sortIdx]=hash
 	sortIdx++
@@ -1745,6 +1845,34 @@ func randSess(n int) (string, error) {
         bytes[i] = letters[int(bytes[i])%len(letters)]
     }
     return string(bytes), nil
+}
+
+func hex64To32(dst *[32]byte, s string) bool {
+    if len(s) != 64 {
+        return false
+    }
+
+    for i := 0; i < 32; i++ {
+        hi := fromHex(s[i*2])
+        lo := fromHex(s[i*2+1])
+        if hi < 0 || lo < 0 {
+            return false
+        }
+        dst[i] = byte(hi<<4 | lo)
+    }
+    return true
+}
+
+func fromHex(c byte) int8 {
+    switch {
+    case '0' <= c && c <= '9':
+        return int8(c - '0')
+    case 'a' <= c && c <= 'f':
+        return int8(c - 'a' + 10)
+    case 'A' <= c && c <= 'F':
+        return int8(c - 'A' + 10)
+    }
+    return -1
 }
 
 func loadUserInfo(filename string) error {
@@ -1837,4 +1965,42 @@ func formatError(err error) string {
     })
 
     return string(b)
+}
+
+func pbbLoad() error {
+	data, err := os.ReadFile(patch_file)
+    if err != nil {
+		if os.IsNotExist(err) { return nil; }
+        return err
+    }
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+        line = strings.TrimSpace(line)
+        if line == "" {
+            continue
+        }
+        kv := strings.SplitN(line, ":", 2)
+        if len(kv) != 2 {
+            continue
+        }
+		logInfo.Println("load patch perm",kv[0])
+        patch_perm.Store(kv[0],struct{}{})
+    }
+	return nil
+}
+
+func removeKey(key string) error {
+    data, err := os.ReadFile(patch_file)
+    if err != nil {
+        return err
+    }
+    lines := strings.Split(string(data), "\n")
+    out := make([]string, 0, len(lines))
+    for _, line := range lines {
+        if strings.HasPrefix(line, key+":") {
+            continue
+        }
+        out = append(out, line)
+    }
+    return os.WriteFile(patch_file, []byte(strings.Join(out, "\n")), 0644)
 }

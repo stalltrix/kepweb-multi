@@ -14,7 +14,17 @@ jobs:
 
     strategy:
       matrix:
-        goarch: [amd64, arm64]
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
+            goarch: arm64
 
     steps:
       - name: Checkout
@@ -29,20 +39,32 @@ jobs:
         run: |
           mkdir -p dist
           export CGO_ENABLED=0
-          export GOOS=linux
+          export GOOS=${{ matrix.goos }}
           export GOARCH=${{ matrix.goarch }}
 
           APP_NAME=$(basename $GITHUB_REPOSITORY)
-          OUTPUT=${APP_NAME}-linux-${GOARCH}
+
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then
+            EXT=".exe"
+          fi
+
+          OUTPUT=${APP_NAME}-${GOOS}-${GOARCH}${EXT}
 
           go build -ldflags "-s -w" -o $OUTPUT .
 
-          zip dist/${OUTPUT}.zip $OUTPUT
+          ZIP_NAME=dist/${APP_NAME}-${GOOS}-${GOARCH}.zip
+
+          zip $ZIP_NAME $OUTPUT
+
+          if ls *.html >/dev/null 2>&1; then
+            zip -j $ZIP_NAME *.html
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.goarch }}
+          name: build-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*.zip
 
   release:
