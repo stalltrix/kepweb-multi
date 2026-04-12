@@ -5,7 +5,7 @@ go 1.23.11
 require (
 	github.com/stalltrix/kep-cli v0.1.2
 	github.com/stalltrix/kep-demo v0.2.6
-	github.com/stalltrix/kepweb v0.1.9
+	github.com/stalltrix/kepweb v0.2.0
 	golang.org/x/time v0.12.0
 )
 

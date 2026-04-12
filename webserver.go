@@ -33,6 +33,7 @@ import (
 	"github.com/stalltrix/kepweb/notify"
 	"github.com/stalltrix/kepweb/postdb"
 	"github.com/stalltrix/kepweb/postcodec"
+	"github.com/stalltrix/kepweb/mapvec"
 	"sync/atomic"
 )
 
@@ -64,11 +65,6 @@ type indexCache struct {
 	Last int64
 }
 
-type map向量 struct {
-    x string
-	y int
-}
-
 type tokenLimiter struct {
     limiter   *rate.Limiter
     lastUsed  int64
@@ -94,7 +90,7 @@ var (
 	token_urlPort string
 	sortList [65536]string
 	sortIdx uint16
-	二维指针 sync.Map
+	二维指针 *mapvec.DataHandle
 	limiterMap sync.Map
 	neighborTokenMap sync.Map
 	manager_csrf string
@@ -252,15 +248,11 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         }
 		post.Replies = append(post.Replies, reply)
         post.LastTime = reply.Time
-		newV:=&map向量{
-			x: post.Replies[0].Hex,
-			y: replyID-1,
+		newV:=mapvec.Map向量{
+			X: post.Replies[0].Hex,
+			Y: replyID-1,
 		}
-		var out [32]byte
-		if !hex64To32(&out, hash){
-			logErr.Println("format hash err:",hash)
-		}
-		二维指针.Store(out,newV)
+		二维指针.Store(hash,newV)
 		sortList[sortIdx]=post.Replies[0].Hex
 		sortIdx++
 		
@@ -274,7 +266,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 		time_now:=time.Now().Unix()
 		if respReplies[0].MetaTime+3600*2 < time_now {
 		for i:=range respReplies {
-			metaData,err:=meta.Meta_get(respReplies[i].User,respReplies[i].Hex[:6])
+			metaData,err:=meta.Meta_get(respReplies[i].User)
 			if err == nil {
 				respReplies[i].Meta=metaData
 			}
@@ -411,7 +403,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
         }
 		metaData:=""
 		if echoMeta {
-			metadata,err:=meta.Meta_get(p.Owner,"")
+			metadata,err:=meta.Meta_get(p.Owner)
 			if err == nil {
 				metaData=metadata
 			}
@@ -576,29 +568,23 @@ func loadData(tag string,renew bool){
 						logErr.Println("ERR: 原始帖子err",err)
 						return
 					}
-					var out [32]byte
-					if !hex64To32(&out, o_hex){
-						logWarn.Println("drop wild point hex:",o_hex)
-						return;
-					}
-					val,ok:=二维指针.Load(out)
+					nowV,ok:=二维指针.Load(o_hex)
 					if !ok {
 						logWarn.Println("drop wild point hex:",o_hex)
 						return;
 					}
-					nowV:=val.(*map向量)
-					o_post,ok:=dbStore.Load(nowV.x)
+					o_post,ok:=dbStore.Load(nowV.X)
 				if ok {
 					if tag_i == 65534 {
 						if (key_des == o_key_des) && bytes.Equal(domain,o_domain){
-						if nowV.y == 0 {
+						if nowV.Y == 0 {
 						if timestamp > o_post.Replies[0].Time{
 							o_post.TypeID=byte(perm & 255)
 							o_post.Replies[0]=postcodec.Reply{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
 						}}else {
-							if len(o_post.Replies)>nowV.y{
-								if timestamp > o_post.Replies[nowV.y].Time{
-								o_post.Replies[nowV.y]=postcodec.Reply{ID: nowV.y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
+							if len(o_post.Replies)>nowV.Y{
+								if timestamp > o_post.Replies[nowV.Y].Time{
+								o_post.Replies[nowV.Y]=postcodec.Reply{ID: nowV.Y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
 								}
 							}
 						}}
@@ -615,16 +601,12 @@ func loadData(tag string,renew bool){
 	Tag: tag_i,
 	Hex: tag,
  })
- 	newV:=&map向量{
-		x: o_hex,
-		y: lastID,
+ 	newV:=mapvec.Map向量{
+		X: o_hex,
+		Y: lastID,
 	}
 	lastID++
-	var out [32]byte
-	if !hex64To32(&out, tag){
-		logErr.Println("format hash err:",tag)
-	}
-	二维指针.Store(out,newV)
+	二维指针.Store(tag,newV)
 	sortList[sortIdx]=o_hex
 	sortIdx++
 				}
@@ -681,15 +663,11 @@ for _,sub := range subs {
 	Tag: tagi2,
 	Hex: sub,
  })
- 	newV:=&map向量{
-		x: tag,
-		y: lastID-1,
+ 	newV:=mapvec.Map向量{
+		X: tag,
+		Y: lastID-1,
 	}
-	var out [32]byte
-	if !hex64To32(&out, sub){
-		logErr.Println("format hash err:",sub)
-	}
-	二维指针.Store(out,newV)
+	二维指针.Store(sub,newV)
  lastID++
 	}
 }
@@ -708,15 +686,11 @@ for _,sub := range subs {
         Replies: newRly,
 		TypeID: perm,
     })
-	newV:=&map向量{
-		x: tag,
-		y: 0,
+	newV:=mapvec.Map向量{
+		X: tag,
+		Y: 0,
 	}
-	var out [32]byte
-	if !hex64To32(&out, tag){
-		logErr.Println("format hash err:",tag)
-	}
-	二维指针.Store(out,newV)
+	二维指针.Store(tag,newV)
 	sortList[sortIdx]=tag
 	sortIdx++
 		}
@@ -812,20 +786,14 @@ func initData() {
 		}
 	}}}
 	for k,v:=range will_change_reply {
-	var out [32]byte
-	if !hex64To32(&out, k){
-		logErr.Println("format hash err:",k)
-		continue
-	}
-		val,ok:=二维指针.Load(out)
+		nowV,ok:=二维指针.Load(k)
 		if ok {
-			nowV:=val.(*map向量)
-    post,ok:=dbStore.Load(nowV.x)
+    post,ok:=dbStore.Load(nowV.X)
 	if ok {
-		if len(post.Replies)>nowV.y{
-			if post.Replies[nowV.y].Time < v.Time {
-			v.ID=nowV.y+1
-			post.Replies[nowV.y]=v
+		if len(post.Replies)>nowV.Y{
+			if post.Replies[nowV.Y].Time < v.Time {
+			v.ID=nowV.Y+1
+			post.Replies[nowV.Y]=v
 			}
 		}
 	}
@@ -887,12 +855,7 @@ func callback_renew(tag_id int){
             return
         }
 		tag:=string(buf[:64])
-		var out [32]byte
-		if !hex64To32(&out, tag){
-			logDebug.Println("debug: renew endof:",tag)
-			return
-		}
-		_,ok:=二维指针.Load(out)
+		_,ok:=二维指针.Load(tag)
 		if ok {
 			logDebug.Println("debug: renew endof:",tag)
 			return
@@ -1040,6 +1003,11 @@ func main() {
 	dbStore,err=postdb.Open(cfg.Dbfile,cfg.DbAddr,cfg.DbPass)
 	if err != nil {
 		logger.Fatalln("Err: open db err:",err)
+	}
+	is_same:=(cfg.VecAddr==cfg.DbAddr)&&(cfg.VecPass==cfg.DbPass)
+	二维指针,err=mapvec.New(cfg.VecAddr,cfg.VecPass,is_same)
+	if err != nil {
+		logger.Fatalln("Err: open vec-db err:",err)
 	}
 	
 	nextroute=make([]send.NextMsg,len(cfg.Neighbors))
@@ -1376,13 +1344,7 @@ case "perm":{
 	io.WriteString(w,`{"state":"set-perm: OK"}`)
 }
 case "resend":{
-	var out [32]byte
-	if !hex64To32(&out, act){
-		logErr.Println("format hash err:",act)
-		io.WriteString(w,`{"state":"resend: post not found"}`)
-		return
-	}
-	_,ok:=二维指针.Load(out)
+	_,ok:=二维指针.Load(act)
 	if !ok {
 		io.WriteString(w,`{"state":"resend: post not found"}`)
 		return
@@ -1461,7 +1423,7 @@ case "top":{
     lastView := strings.TrimPrefix(line, "# ")
 	metaData:=""
 	if echoMeta {
-		metadata,err:=meta.Meta_get(post_top.Owner,"")
+		metadata,err:=meta.Meta_get(post_top.Owner)
 		if err == nil {
 			metaData=metadata
 		}
@@ -1490,25 +1452,18 @@ case "top":{
 case "delmsg":{
 	del_ok:=false
 	is_root:=false
-	var out [32]byte
-	if !hex64To32(&out, act){
-		logErr.Println("format hash err:",act)
-		io.WriteString(w,`{"state":"del post not found"}`)
-		return
-	}
-	val,ok:=二维指针.Load(out)
+	nowV,ok:=二维指针.Load(act)
 	if ok {
-		nowV:=val.(*map向量)
-		if nowV.y==0{
-	_,ok=dbStore.Load(nowV.x)
-	if ok {dbStore.Delete(nowV.x);del_ok=true;}
+		if nowV.Y==0{
+	_,ok=dbStore.Load(nowV.X)
+	if ok {dbStore.Delete(nowV.X);del_ok=true;}
 	is_root=true
 		}else{
-	post,ok:=dbStore.Load(nowV.x)
+	post,ok:=dbStore.Load(nowV.X)
 	if ok {
 		del_ok=true;
-		if len(post.Replies)>nowV.y{
-			post.Replies[nowV.y].Post="[user delete]"
+		if len(post.Replies)>nowV.Y{
+			post.Replies[nowV.Y].Post="[user delete]"
 		}
 	}
 		}
@@ -1752,27 +1707,21 @@ func sendNewPost(txt string,tag,typeid int,point_to,point_to_root string,uinfo *
 	var newRly = []postcodec.Reply{{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: uint16(req.Tag), Hex: hash},}
 	
 if req.Tag == 65534 {
-	var out [32]byte
-	if !hex64To32(&out, point_to){
-		logErr.Println("format hash err:",point_to)
-		return
-	}
-	val,ok:=二维指针.Load(out)
+	NowV,ok:=二维指针.Load(point_to)
 	if !ok {
 		return
 	}
-	NowV:=val.(*map向量)
-	o_post,ok:=dbStore.Load(NowV.x)
+	o_post,ok:=dbStore.Load(NowV.X)
 	if ok {
-		if NowV.y==0{
+		if NowV.Y==0{
 		if o_post.Owner == uinfo.Name{
 		o_tag:=o_post.Replies[0].Tag
 		o_post.TypeID=byte(typeid & 255)
 		o_post.Replies[0]=postcodec.Reply{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
 		}}else{
-			if len(o_post.Replies)>NowV.y{
-		o_tag:=o_post.Replies[NowV.y].Tag
-		o_post.Replies[NowV.y]=postcodec.Reply{ID: NowV.y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
+			if len(o_post.Replies)>NowV.Y{
+		o_tag:=o_post.Replies[NowV.Y].Tag
+		o_post.Replies[NowV.Y]=postcodec.Reply{ID: NowV.Y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
 			}
 		}
 	}
@@ -1785,15 +1734,11 @@ if req.Tag == 65534 {
         Replies: newRly,
 		TypeID: byte(typeid & 255),
 	})
-	newV:=&map向量{
-		x: hash,
-		y: 0,
+	newV:=mapvec.Map向量{
+		X: hash,
+		Y: 0,
 	}
-	var out [32]byte
-	if !hex64To32(&out, hash){
-		logErr.Println("format hash err:",hash)
-	}
-	二维指针.Store(out,newV)
+	二维指针.Store(hash,newV)
 }
 	sortList[sortIdx]=hash
 	sortIdx++
@@ -1845,34 +1790,6 @@ func randSess(n int) (string, error) {
         bytes[i] = letters[int(bytes[i])%len(letters)]
     }
     return string(bytes), nil
-}
-
-func hex64To32(dst *[32]byte, s string) bool {
-    if len(s) != 64 {
-        return false
-    }
-
-    for i := 0; i < 32; i++ {
-        hi := fromHex(s[i*2])
-        lo := fromHex(s[i*2+1])
-        if hi < 0 || lo < 0 {
-            return false
-        }
-        dst[i] = byte(hi<<4 | lo)
-    }
-    return true
-}
-
-func fromHex(c byte) int8 {
-    switch {
-    case '0' <= c && c <= '9':
-        return int8(c - '0')
-    case 'a' <= c && c <= 'f':
-        return int8(c - 'a' + 10)
-    case 'A' <= c && c <= 'F':
-        return int8(c - 'A' + 10)
-    }
-    return -1
 }
 
 func loadUserInfo(filename string) error {
