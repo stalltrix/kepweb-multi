@@ -12,6 +12,7 @@ import (
 	"github.com/stalltrix/kep-demo/kepresolv"
 	"github.com/stalltrix/kep-demo/send"
 	"github.com/stalltrix/kep-demo/ntp"
+	"github.com/stalltrix/kep-demo/limit"
 	"crypto/rand"
 	"encoding/hex"
 	"time"
@@ -54,6 +55,7 @@ type ReplyRequest struct {
 	Tag int  `json:"tag"`
 	Point_to string  `json:"point_to"`
 	TypeID int  `json:"typeid"`
+	Nonce string `json:"nonce"`
 }
 
 type LoginType struct {
@@ -105,6 +107,7 @@ var (
 	selfdir string
 	patch_perm sync.Map
 	patch_file string
+	post_prefix string
 	userInfo = make(map[string]UserInfo)
 	userLock sync.RWMutex
 	keyfile string
@@ -232,6 +235,26 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
             w.WriteHeader(405)
             return
         }
+			
+		limitNum:=limit.GetLimit("reply:"+uinfo.Name)
+		if limitNum > 120 {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status": "reply rate limit exceeded"}`))
+			return
+		}
+		
+		if !strings.HasPrefix(req.Nonce,post_prefix+"_"+uinfo.Name) {
+            w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status": "post format err"}`))
+			return
+		}
+		
+		if !addNonce(req.Nonce) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status": "duplicate"}`))
+            return
+        }
+		
 		req.Tag=0 //回帖恒为0
 		hash,_:=async_send(req,uinfo)
 		
@@ -879,7 +902,7 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		info:=val.(*UserInfo)
 		
-		w.Write([]byte(`{ "status":1, "user":"`+info.Name+`" }`))
+		w.Write([]byte(`{"status":1,"user":"`+info.Name+`","nonce":"`+post_prefix+"_"+info.Name+`"}`))
 }
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -928,7 +951,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	time.AfterFunc(3600*24*15*time.Second, func() {
 		sessMap.Delete(sess)
 	})
-	w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"https://avatar.stalltrix.com/avatar"}`))
+	w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"https://avatar.stalltrix.com/avatar","nonce":"`+post_prefix+"_"+info.Name+`"}`))
 }
 
 func main() {
@@ -1617,11 +1640,30 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
                 w.Write([]byte("markdown too large"))
                 return
             }
+			
+			if !strings.HasPrefix(nonce,post_prefix+"_"+info.Name) {
+				w.Write([]byte("post format err"))
+                return
+			}
 
             if !addNonce(nonce) {
                 w.Write([]byte("duplicate"))
                 return
             }
+			
+			if point_to == "" {
+				limitNum:=limit.GetLimit("topic:"+info.Name)
+				if limitNum > 10 {
+					w.Write([]byte("topic rate limit exceeded"))
+					return
+				}
+			} else {
+				limitNum:=limit.GetLimit("chge:"+info.Name)
+				if limitNum > 50 {
+					w.Write([]byte("change rate limit exceeded"))
+					return
+				}
+			}
 
 			sendNewPost(markdown,tagn,typeidn,point_to,point_to_root,info)
 
@@ -1775,6 +1817,10 @@ for{
 	manager_csrf,err=randSess(8)
 	if err!=nil{
 		manager_csrf=sortList[sortIdx-1]
+	}
+	post_prefix,err=randSess(5)
+	if err!=nil{
+		post_prefix=strconv.Itoa(int(time.Now().Unix())&0xffff)
 	}
 	time.Sleep(time.Second*60*60*24)
 }

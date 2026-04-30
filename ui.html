@@ -369,6 +369,11 @@
     color: var(--text-muted);
     margin-bottom:12px;
 }
+@media (max-width:769px){
+    .mobile-hide{
+        display:none;
+    }
+}
     </style>
 	<link rel="stylesheet" href="/static/markdown.min.css">
 </head>
@@ -376,7 +381,7 @@
 
     <header class="site-header">
         <div class="header-inner">
-            <a href="#" class="logo">meta</a>
+            <a href="#" class="logo">stalltrix</a>
             <div class="header-icons">
 	<a href="https://github.com/stalltrix/kepweb-multi"
    target="_blank"
@@ -403,7 +408,7 @@
 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/>
 </svg>
 
-<span style="margin-left:6px;">Source</span>
+<span style="margin-left:6px;" class="mobile-hide">Source</span>
 
 </a>
     <span class="icon search-link" onclick="alert('需要自行对接后端ES或者第三方搜索')">
@@ -416,7 +421,7 @@ stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="r
 
 </svg>
 
-<span style="margin-left:6px;">搜索</span>
+<span style="margin-left:6px;" class="mobile-hide">搜索</span>
 
 </span>
     <svg id="menu-toggle" width="20" height="20" viewBox="0 0 24 24"
@@ -645,6 +650,7 @@ currentHex: null,
 pageSize: 16,
 token:null,
 isLogin:false,
+currentNonce: null,
 
 async init(){
 
@@ -737,6 +743,7 @@ if(data.status===1){
 
     this.token = token;
     this.isLogin = true;
+	this.currentNonce = data.nonce;
 
     const avatar = data.img || 
     `https://avatar.stalltrix.com/avatar?seed=${encodeURIComponent(data.user)}`;
@@ -780,6 +787,7 @@ async checkLogin(){
         if(data.status===1){
 
             this.isLogin = true;
+			this.currentNonce = data.nonce;
 
             const avatar = data.img || 
             `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(data.user)}`;
@@ -829,7 +837,7 @@ newPost(){
         return;
     }
 
-    alert("打开发帖编辑器");
+    location.href = "/index.php?manager=newpost"
 
 },
 
@@ -1012,7 +1020,7 @@ async submitReply(){
 
     if(!payload) return;
 
-    await fetch(`${this.apiBase}/view/${this.currentTag}/${this.currentHex}`,{
+    const res = await fetch(`${this.apiBase}/view/${this.currentTag}/${this.currentHex}`,{
 
         method:"POST",
 
@@ -1025,15 +1033,37 @@ async submitReply(){
         body:JSON.stringify({
             post_payload:payload,
             tag:parseInt(this.currentTag),
-            point_to:this.currentHex
+            point_to:this.currentHex,
+            nonce:this.generateNonce()
         })
 
     });
+	
+    const data = await res.json();
+
+    if (data.status==="reply rate limit exceeded"){
+        alert("每半天最多回复120个帖子");
+		return
+    }
+	
+    if (data.status==="post format err"){
+        alert("格式错误");
+        return;
+    }
+
+    if (data.status==="duplicate"){
+        alert("重复发送");
+        return;
+    }
 
     document.getElementById("reply-text").value="";
 
     this.loadPost(this.currentHex);
 
+},
+
+generateNonce(){
+return this.currentNonce+"_"+Math.random().toString(36).slice(2);
 },
 
 escape(text){
@@ -1077,7 +1107,7 @@ function getAvatar(item,ietm){
         }
 	}
     const seed = encodeURIComponent(displayName);
-    return `https://avatar.stalltrix.com/avatar?seed=${seed}`;
+    return `https://avatar.stalltrix.com/avatar/${seed}.svg`;
 }
 const menuBtn = document.getElementById("menu-toggle");
 menuBtn.onclick = () => {

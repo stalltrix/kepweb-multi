@@ -285,6 +285,7 @@ code{
 <script>
 let editMode = false;
 let editData = null;
+let genNonce = null;
 function showLoading(){
 document.getElementById("msgBox").style.display="flex";
 document.getElementById("spinner").style.display="block";
@@ -308,12 +309,26 @@ function closeMsg(){
 document.getElementById("msgBox").style.display="none";
 }
 
-function generateNonce(){
-return Date.now()+"_"+Math.random().toString(36).slice(2);
+function generateNonce(prefix){
+return prefix+Date.now()+"_"+Math.random().toString(36).slice(2);
 }
 
 function goHome() {
 window.location.href="/index.php";
+}
+
+async function checkLogin() {
+    try {
+        const res = await fetch('/me', { credentials: "include" });
+        const data = await res.json();
+        if (data.status === 1) {
+            genNonce = generateNonce(data.nonce);
+        } else {
+			showMsg("当前未登录");
+		}
+    } catch (e) {
+        ;
+    }
 }
 
 function postMarkdown(){
@@ -338,8 +353,6 @@ pointToRoot = editData.pointtoroot;
 }
 }
 
-const nonce=generateNonce();
-
 fetch("/index.php",{
 method:"POST",
 credentials:"include",
@@ -350,7 +363,7 @@ body:
 "markdown="+encodeURIComponent(markdown)+
 "&tag="+encodeURIComponent(tag)+
 "&typeid="+encodeURIComponent(perm)+
-"&nonce="+encodeURIComponent(nonce)+
+"&nonce="+encodeURIComponent(genNonce)+
 (editMode ? "&pointto="+encodeURIComponent(pointTo) : "")+
 (editMode && pointToRoot ? "&pointtoroot="+encodeURIComponent(pointToRoot) : "")
 })
@@ -366,11 +379,20 @@ showMsg("发帖成功",true);
 else if(data.trim()==="access deny"){
 showMsg("没有权限");
 }
+else if(data.trim()==="post format err"){
+showMsg("格式错误");
+}
 else if(data.trim()==="duplicate"){
 showMsg("重复提交");
 }
+else if(data.trim()==="topic rate limit exceeded"){
+showMsg("每半天最多10贴");
+}
+else if(data.trim()==="change rate limit exceeded"){
+showMsg("每半天最多修改50次");
+}
 else{
-showMsg("服务器返回: "+data);
+showMsg("失败: "+data);
 }
 
 })
@@ -409,6 +431,7 @@ document.getElementById("preview").innerHTML=html;
 
 document.getElementById("markdownInput").addEventListener("input",renderMarkdown);
 
+checkLogin();
 initEditMode();
 renderMarkdown();
 
