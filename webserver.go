@@ -269,6 +269,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 			Tag: uint16(req.Tag),
 			Hex: hash,
         }
+		reply.FirstTime=reply.Time
 		post.Replies = append(post.Replies, reply)
         post.LastTime = reply.Time
 		newV:=mapvec.Map向量{
@@ -603,11 +604,13 @@ func loadData(tag string,renew bool){
 						if nowV.Y == 0 {
 						if timestamp > o_post.Replies[0].Time{
 							o_post.TypeID=byte(perm & 255)
-							o_post.Replies[0]=postcodec.Reply{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
+							first_time:=o_post.Replies[0].FirstTime
+							o_post.Replies[0]=postcodec.Reply{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
 						}}else {
 							if len(o_post.Replies)>nowV.Y{
 								if timestamp > o_post.Replies[nowV.Y].Time{
-								o_post.Replies[nowV.Y]=postcodec.Reply{ID: nowV.Y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, Tag: o_tag_i, Hex: o_hex}
+								first_time:=o_post.Replies[nowV.Y].FirstTime
+								o_post.Replies[nowV.Y]=postcodec.Reply{ID: nowV.Y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
 								}
 							}
 						}}
@@ -621,6 +624,7 @@ func loadData(tag string,renew bool){
     Me:   (key_des == o_key_des) && bytes.Equal(domain,o_domain),
     Post: string(txt),
     Time: timestamp,
+	FirstTime: timestamp,
 	Tag: tag_i,
 	Hex: tag,
  })
@@ -636,7 +640,7 @@ func loadData(tag string,renew bool){
 				}
 				return;
 			}
-			var newRly = []postcodec.Reply{{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: tag_i, Hex: tag},}
+			var newRly = []postcodec.Reply{{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: timestamp, Tag: tag_i, Hex: tag},}
 			var lastID=2
 			subs,err:=kepdb.ReadSub(tag)
 			if err ==nil {
@@ -668,6 +672,7 @@ for _,sub := range subs {
     Me:   true,
     Post: string(txt2),
     Time: timestamp2,
+	FirstTime: timestamp,
 	Tag: tag_i,
 	Hex: tag,
 			}
@@ -683,6 +688,7 @@ for _,sub := range subs {
     Me:   (key_des == key_des2) && bytes.Equal(domain,domain2),
     Post: string(txt2),
     Time: timestamp2,
+	FirstTime: timestamp2,
 	Tag: tagi2,
 	Hex: sub,
  })
@@ -699,7 +705,7 @@ for _,sub := range subs {
 		if i==0||j==0{
 			return false
 		}
-		return newRly[i].Time < newRly[j].Time
+		return newRly[i].FirstTime < newRly[j].FirstTime
 	})	
     dbStore.Store(tag,&postcodec.Post{
         PostHex: tag,
@@ -816,6 +822,7 @@ func initData() {
 		if len(post.Replies)>nowV.Y{
 			if post.Replies[nowV.Y].Time < v.Time {
 			v.ID=nowV.Y+1
+			v.FirstTime=post.Replies[nowV.Y].FirstTime
 			post.Replies[nowV.Y]=v
 			}
 		}
@@ -1746,7 +1753,7 @@ func sendNewPost(txt string,tag,typeid int,point_to,point_to_root string,uinfo *
 		return
 	}
 	timestamp:=int64(time.Now().Unix())
-	var newRly = []postcodec.Reply{{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: uint16(req.Tag), Hex: hash},}
+	var newRly = []postcodec.Reply{{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: timestamp, Tag: uint16(req.Tag), Hex: hash},}
 	
 if req.Tag == 65534 {
 	NowV,ok:=二维指针.Load(point_to)
@@ -1758,12 +1765,14 @@ if req.Tag == 65534 {
 		if NowV.Y==0{
 		if o_post.Owner == uinfo.Name{
 		o_tag:=o_post.Replies[0].Tag
+		o_time:=o_post.Replies[0].FirstTime
 		o_post.TypeID=byte(typeid & 255)
-		o_post.Replies[0]=postcodec.Reply{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
+		o_post.Replies[0]=postcodec.Reply{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: o_time, Tag: o_tag, Hex: point_to}
 		}}else{
 			if len(o_post.Replies)>NowV.Y{
 		o_tag:=o_post.Replies[NowV.Y].Tag
-		o_post.Replies[NowV.Y]=postcodec.Reply{ID: NowV.Y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, Tag: o_tag, Hex: point_to}
+		o_time:=o_post.Replies[NowV.Y].FirstTime
+		o_post.Replies[NowV.Y]=postcodec.Reply{ID: NowV.Y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: o_time, Tag: o_tag, Hex: point_to}
 			}
 		}
 	}

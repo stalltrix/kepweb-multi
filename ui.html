@@ -746,7 +746,7 @@ if(data.status===1){
 	this.currentNonce = data.nonce;
 
     const avatar = data.img || 
-    `https://avatar.stalltrix.com/avatar?seed=${encodeURIComponent(data.user)}`;
+    `https://avatar.stalltrix.com/avatar/${encodeURIComponent(data.user)}.svg`;
 
     document.getElementById("user-avatar").src = avatar;
 	document.getElementById("newtopics").style.display="flex";
@@ -790,7 +790,7 @@ async checkLogin(){
 			this.currentNonce = data.nonce;
 
             const avatar = data.img || 
-            `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(data.user)}`;
+            `https://avatar.stalltrix.com/avatar/${encodeURIComponent(data.user)}.svg`;
 
             document.getElementById("user-avatar").src = avatar;
 			document.getElementById("newtopics").style.display="flex";
@@ -863,7 +863,17 @@ async loadIndex(){
         const dateStr = new Date(item.lasttime*1000).toLocaleString();
 		let pageView = "-"
 		if (item.views && item.views != 0) {
-			pageView=String(item.views)
+		  const v = item.views;
+		  const f = (n, u) => {
+		    let s = (v / n).toFixed(1);
+		    if (s.endsWith('.0')) s = s.slice(0, -2);
+		    return s + u;
+		  };
+
+		  if (v >= 1e10) pageView = f(1e9, 'B');
+		  else if (v >= 1e7) pageView = f(1e6, 'M');
+		  else if (v >= 1e4) pageView = f(1e3, 'K');
+		  else pageView = String(v);
 		}
 		const tag = TAG_MAP[item.tag] || {name:"未知",color:"#999"};
 		let metaObj = null;
@@ -936,6 +946,11 @@ async loadPost(hex){
 
     const res=await fetch(`${this.apiBase}/view/${this.currentTag}/${hex}`);
 
+    if (!res.ok) {
+        container.innerHTML = '<h3>页面不存在或已删除</h3>';
+        return
+    }
+
     const data=await res.json();
 
     container.innerHTML="";
@@ -952,8 +967,16 @@ async loadPost(hex){
         }
     } catch(e) {}
 
-    const dateStr = new Date(item.post_time * 1000).toLocaleString();
-	let displayName = this.escape(item.user);
+    const postDate = new Date(item.post_time * 1000);
+    const firstDate = new Date(item.first_time * 1000);
+
+    const dateStr = `<span title="${postDate.toLocaleString()}">${timeAgo(postDate)}</span>`;
+    const firstPost = `<span title="${firstDate.toLocaleString()}">${timeAgo(firstDate)}</span>`;
+    
+    const timeStr = item.post_time === item.first_time
+  ? dateStr
+  : `${firstPost} edited ${dateStr}`;
+    let displayName = this.escape(item.user);
     let userSuffix = "";
     let avatar = "";
     let metaId = this.escape(item.meta);
@@ -972,7 +995,7 @@ async loadPost(hex){
             avatar = `<img src="${this.escape(metaObj.img)}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
         } else {
 			const seed = encodeURIComponent(displayName);
-			avatar = `<img src="https://avatar.stalltrix.com/avatar?seed=${seed}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
+			avatar = `<img src="https://avatar.stalltrix.com/avatar/${seed}.svg" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
 		}
     }
 
@@ -985,7 +1008,7 @@ async loadPost(hex){
             <div class="comment-user">
                 ${avatar}<span class="comment-id">#${item.id}</span>
                 ${displayName} ${userSuffix}  
-				<span style="font-size:12px;color:#999"> · ${dateStr}</span>
+				<span style="font-size:12px;color:#999"> · ${timeStr}</span>
             </div>
 
             <div class="comment-meta">
@@ -1115,6 +1138,13 @@ menuBtn.onclick = () => {
         window.location.href = "/about";
         return;
     }
+};
+function timeAgo(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}days ago`;
 };
 </script>
 
