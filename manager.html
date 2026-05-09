@@ -133,6 +133,7 @@ input,textarea{
 <li><a onclick="showPanel('toppost')">置顶管理</a></li>
 <li><a onclick="showPanel('changetag')">分类管理</a></li>
 <li><a onclick="showPanel('setperm')">权限管理</a></li>
+<li><a onclick="showPanel('setmeta')">头像管理</a></li>
 </ul>
 
 </div>
@@ -265,6 +266,20 @@ input,textarea{
 
 <button class="btn" onclick="permPost(1)">加权</button>
 <button class="btn" onclick="permPost(0)">解锁</button>
+
+</div>
+
+</div>
+<div id="setmeta" class="panel" style="display:none">
+
+<div class="card">
+
+<h3>头像管理</h3>
+
+<input id="metaID" placeholder="输入用户域名">
+
+<button class="btn" onclick="metaOff(1)">隐藏</button>
+<button class="btn" onclick="metaOff(0)">恢复</button>
 
 </div>
 
@@ -484,6 +499,21 @@ return
 }
 
 api("perm",id,String(set)).then(res=>{
+alert(res.state)
+})
+
+}
+
+function metaOff(set){
+
+const id=document.getElementById("metaID").value.trim()
+
+if(!id){
+alert("请输入用户域名")
+return
+}
+
+api("metaoff",id,String(set)).then(res=>{
 alert(res.state)
 })
 

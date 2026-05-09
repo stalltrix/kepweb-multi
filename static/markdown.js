@@ -1,5 +1,5 @@
 /**
- * kep markdown resolv v0.2 - a safe markdown parser
+ * kep markdown resolv v0.3 - a safe markdown parser
  * Copyright (c) 2024-2026, ALL kep Contributors. (MIT Licensed)
  * require marked v15.0.12
  */
@@ -22,10 +22,13 @@ function renderColorText(text) {
 }
 function renderVideoShortcut(text) {
   const regex = /@\[(.*?)\]\((.*?)\)/g;
-  return text.replace(regex, (match, title, url) => {
+  return text.replace(regex, (match, title, url, offset, str) => {
+	if (offset > 0 && str[offset - 1] === "`") {
+      return match;
+    }
     url = url.trim();
     if (!/^https?:\/\//i.test(url)) {
-      return "";
+      return match;
     }
     return `<video src="${encodeURI(url)}" controls title="${escapeHTML(title)}"></video>`;
   });
@@ -33,23 +36,29 @@ function renderVideoShortcut(text) {
 const renderer = {
   code({ text, lang }) {
     const langClass = lang ? ` class="language-${lang}"` : '';
-    return `<pre><code${langClass}>${text}</code></pre>`;
+    let htm = text.replace(/br&gt;/gi,"br&shy;&gt;");
+	htm = htm.replace(/@@@@/gi,"@&shy;@@&shy;@");
+	htm = htm.replace(/@\{#/gi,"@\{&shy;#");
+	return `<pre><code${langClass}>${htm}</code></pre>`;
   },
   codespan({ text }) {
-    return `<code>${text}</code>`;
+	let htm = text.replace(/br&gt;/gi,"br&shy;&gt;");
+	htm = htm.replace(/@@@@/gi,"@&shy;@@&shy;@");
+	htm = htm.replace(/@\{#/gi,"@\{&shy;#");
+    return `<code>${htm}</code>`;
   },
    link({ href, title, tokens }) {
     if (!/^https?:\/\//i.test(href)) {
       return this.parser.parseInline(tokens);
     }
     const text = this.parser.parseInline(tokens);
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer"${
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer nofollow"${
       title ? ` title="${escapeHTML(title)}"` : ""
     }>${text}</a>`;
   },
   image({ href, title, text }) {
     if (!/^https?:\/\//i.test(href)) {
-      return '';
+      return '!{Image Broken}';
     }
     return `<img src="${href}" alt="${escapeHTML(text)}"${
       title ? ` title="${escapeHTML(title)}"` : ""

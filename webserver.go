@@ -105,9 +105,12 @@ var (
 	logWarn logger.Log_TYPE
 	logErr logger.Log_TYPE
 	selfdir string
-	patch_perm sync.Map
+	patch_perm = make(map[string]struct{})
 	patch_file string
 	post_prefix string
+	metaoff_file string
+	meta_off = make(map[string]struct{})
+	adminLock sync.Mutex
 	userInfo = make(map[string]UserInfo)
 	userLock sync.RWMutex
 	keyfile string
@@ -218,7 +221,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "post not found", http.StatusNotFound)
 			return
 		}
-		_,ok:=patch_perm.Load(postHex)
+		_,ok:=patch_perm[postHex]
 		if ok {
 			http.Error(w, "post not found", http.StatusNotFound)
 			return
@@ -288,12 +291,15 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	if echoMeta {
 		respReplies:=post.Replies
 		time_now:=time.Now().Unix()
-		if respReplies[0].MetaTime+3600*2 < time_now {
+		if respReplies[0].MetaTime+3600 < time_now {
 		for i:=range respReplies {
+		  _,ok:=meta_off[respReplies[i].User]
+		  if !ok {
 			metaData,err:=meta.Meta_get(respReplies[i].User)
 			if err == nil {
 				respReplies[i].Meta=metaData
 			}
+		  }
 		}
 		respReplies[0].MetaTime=time_now
 		}
@@ -427,10 +433,13 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
         }
 		metaData:=""
 		if echoMeta {
+		  _,ok:=meta_off[p.Owner]
+		  if !ok {
 			metadata,err:=meta.Meta_get(p.Owner)
 			if err == nil {
 				metaData=metadata
 			}
+		  }
 		}
 		
 		viewNum:=0
@@ -1113,6 +1122,14 @@ func main() {
 	if err != nil {
 		logWarn.Println("Warn: load perm file:",err)
 	}
+	metaoff_file=cfg.Metaofffile
+	if metaoff_file=="" {
+		metaoff_file=filepath.Join(self, "metaoff.json")
+	}
+	err=metaoffLoad()
+	if err != nil {
+		logWarn.Println("Warn: load metaoff file:",err)
+	}
 
     logWarn.Println("server started on: ",cfg.Listen)
 	if argc >2 {
@@ -1333,6 +1350,29 @@ case "pmsg":{
 	//TODO:
 	io.WriteString(w,`{"state":"TODO..."}`)
 }
+case "metaoff":{
+	_,ok=meta_off[act]
+	if Ner_url == "0" {
+	//remove
+		if !ok {
+			io.WriteString(w,`{"state":"remove meta-off: user not found"}`)
+			return
+		}
+	} else {
+		if ok {
+			io.WriteString(w,`{"state":"set meta-off: user exist"}`)
+			return
+		}
+	}
+	adminLock.Lock()
+	meta_off=changeMap(meta_off,act,Ner_url!="0")
+	data, err := json.Marshal(meta_off)
+	if err == nil {
+		os.WriteFile(metaoff_file, data, 0600)
+	}
+	adminLock.Unlock()
+	io.WriteString(w,`{"state":"set meta-off: OK"}`)
+}
 case "perm":{
 	_,ok:=dbStore.Load(act)
 	if !ok {
@@ -1344,16 +1384,18 @@ case "perm":{
 		return
 	}
 	//管理员界面，先默认无并发。以后再完善
+	adminLock.Lock()
+	defer adminLock.Unlock()
 	if Ner_url == "0" {
 		//remove
-		_,ok=patch_perm.Load(act)
+		_,ok=patch_perm[act]
 		if ok {
 			err = removeKey(act)
 			if err != nil {
 				io.WriteString(w, formatError(err))
 				return
 			}
-			patch_perm.Delete(act)
+			patch_perm=changeMap(patch_perm,act,false)
 		}
 	} else {
 		//add
@@ -1369,7 +1411,7 @@ case "perm":{
 			return
 		}
 		f.Close()
-		patch_perm.Store(act,struct{}{})
+		patch_perm=changeMap(patch_perm,act,true)
 	}
 	io.WriteString(w,`{"state":"set-perm: OK"}`)
 }
@@ -1453,10 +1495,13 @@ case "top":{
     lastView := strings.TrimPrefix(line, "# ")
 	metaData:=""
 	if echoMeta {
+	  _,ok:=meta_off[post_top.Owner]
+	  if !ok {
 		metadata,err:=meta.Meta_get(post_top.Owner)
 		if err == nil {
 			metaData=metadata
 		}
+	  }
 	}
 	viewNum:=0
 	postKey, err := strconv.ParseUint(post_top.PostHex[:16], 16, 64)
@@ -1956,9 +2001,18 @@ func pbbLoad() error {
             continue
         }
 		logInfo.Println("load patch perm",kv[0])
-        patch_perm.Store(kv[0],struct{}{})
+        patch_perm[kv[0]]=struct{}{}
     }
 	return nil
+}
+
+func metaoffLoad() error {
+	data, err := os.ReadFile(metaoff_file)
+    if err != nil {
+		if os.IsNotExist(err) { return nil; }
+        return err
+    }
+	return json.Unmarshal(data, &meta_off)
 }
 
 func removeKey(key string) error {
@@ -1975,4 +2029,17 @@ func removeKey(key string) error {
         out = append(out, line)
     }
     return os.WriteFile(patch_file, []byte(strings.Join(out, "\n")), 0644)
+}
+
+func changeMap(oldMap map[string]struct{},key string,setadd bool) map[string]struct{} {
+	newMap := make(map[string]struct{}, len(oldMap))
+	for k:=range oldMap {
+		newMap[k]=struct{}{}
+	}
+	if setadd {
+		newMap[key]=struct{}{}
+	} else {
+		delete(newMap,key)
+	}
+	return newMap
 }

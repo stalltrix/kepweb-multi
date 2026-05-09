@@ -10,6 +10,7 @@
 	"db_addr": "",
 	"db_pass": "",
 	"perm_file": "",
+	"metaoff_file": "",
 	"neighbors": [
 		{
 			"url": "http://127.0.0.1:8081",
