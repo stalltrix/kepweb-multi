@@ -1,7 +1,7 @@
 # kepweb-multi
 
 <div align="center">
-  <img src="img/favicon.jpg" width="120">
+  <img src="img/favicon.png" width="120">
 </div>
 
 ![Go Report Card](img/goreport.svg)
