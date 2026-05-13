@@ -1,5 +1,14 @@
 # kepweb-multi
 
+<div align="center">
+  <img src="img/favicon.jpg" width="120">
+</div>
+
+![Go Report Card](img/goreport.svg)
+[![Go Reference](https://pkg.go.dev/badge/github.com/stalltrix/kepweb-multi.svg)](https://pkg.go.dev/github.com/stalltrix/kepweb-multi)
+[![Releases](https://img.shields.io/github/v/release/stalltrix/kepweb-multi.svg?style=flat-square&include_prereleases)](https://github.com/stalltrix/kepweb-multi/releases)
+[![LICENSE](https://img.shields.io/github/license/stalltrix/kepweb-multi.svg?style=flat-square)](https://github.com/stalltrix/kepweb-multi/blob/master/LICENSE)
+
 kep webUI-multi程序，允许多用户共用一个节点。
 
 现实现为所有用户一个mainkey，以pkey区分用户，可能此实现不符合协议初衷
