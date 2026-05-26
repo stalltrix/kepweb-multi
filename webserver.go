@@ -282,6 +282,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 		二维指针.Store(hash,newV)
 		sortList[sortIdx]=post.Replies[0].Hex
 		sortIdx++
+		post.Replies[0].MetaTime=0
 		
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status": "ok"}`))
@@ -614,12 +615,14 @@ func loadData(tag string,renew bool){
 						if timestamp > o_post.Replies[0].Time{
 							o_post.TypeID=byte(perm & 255)
 							first_time:=o_post.Replies[0].FirstTime
-							o_post.Replies[0]=postcodec.Reply{ID: 1, User: string(domain), Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
+							meta_data:=o_post.Replies[0].Meta
+							o_post.Replies[0]=postcodec.Reply{ID: 1, User: string(domain), Meta: meta_data, Me: true, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
 						}}else {
 							if len(o_post.Replies)>nowV.Y{
 								if timestamp > o_post.Replies[nowV.Y].Time{
 								first_time:=o_post.Replies[nowV.Y].FirstTime
-								o_post.Replies[nowV.Y]=postcodec.Reply{ID: nowV.Y+1, User: string(domain), Meta: "", Me: false, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
+								meta_data:=o_post.Replies[nowV.Y].Meta
+								o_post.Replies[nowV.Y]=postcodec.Reply{ID: nowV.Y+1, User: string(domain), Meta: meta_data, Me: false, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
 								}
 							}
 						}}
@@ -627,7 +630,7 @@ func loadData(tag string,renew bool){
 					}
 						lastID:=len(o_post.Replies)
 						o_post.Replies = append(o_post.Replies, postcodec.Reply{
-    ID:   lastID,
+    ID:   lastID+1,
     User: string(domain),
     Meta: "",
     Me:   (key_des == o_key_des) && bytes.Equal(domain,o_domain),
@@ -641,8 +644,8 @@ func loadData(tag string,renew bool){
 		X: o_hex,
 		Y: lastID,
 	}
-	lastID++
 	二维指针.Store(tag,newV)
+	o_post.Replies[0].MetaTime=0
 	sortList[sortIdx]=o_hex
 	sortIdx++
 				}
@@ -1812,12 +1815,14 @@ if req.Tag == 65534 {
 		o_tag:=o_post.Replies[0].Tag
 		o_time:=o_post.Replies[0].FirstTime
 		o_post.TypeID=byte(typeid & 255)
-		o_post.Replies[0]=postcodec.Reply{ID: 1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: o_time, Tag: o_tag, Hex: point_to}
+		meta_data:=o_post.Replies[0].Meta
+		o_post.Replies[0]=postcodec.Reply{ID: 1, User: uinfo.Name, Meta: meta_data, Me: true, Post: string(txt), Time: timestamp, FirstTime: o_time, Tag: o_tag, Hex: point_to}
 		}}else{
 			if len(o_post.Replies)>NowV.Y{
 		o_tag:=o_post.Replies[NowV.Y].Tag
 		o_time:=o_post.Replies[NowV.Y].FirstTime
-		o_post.Replies[NowV.Y]=postcodec.Reply{ID: NowV.Y+1, User: uinfo.Name, Meta: "", Me: true, Post: string(txt), Time: timestamp, FirstTime: o_time, Tag: o_tag, Hex: point_to}
+		meta_data:=o_post.Replies[NowV.Y].Meta
+		o_post.Replies[NowV.Y]=postcodec.Reply{ID: NowV.Y+1, User: uinfo.Name, Meta: meta_data, Me: true, Post: string(txt), Time: timestamp, FirstTime: o_time, Tag: o_tag, Hex: point_to}
 			}
 		}
 	}

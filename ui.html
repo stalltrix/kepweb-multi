@@ -212,73 +212,6 @@
                 display: none;
             }
         }
-#detail-view {
-    max-width: 860px;
-    margin: 0 auto;
-}
-.back-link {
-    display: inline-block;
-    margin-bottom: 18px;
-    color: var(--primary-color);
-    font-size: 14px;
-}
-.thread-main {
-    background: #fff;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 26px;
-    margin-bottom: 20px;
-}
-.thread-title {
-    font-size: 22px;
-    font-weight: 600;
-    margin-bottom: 12px;
-}
-.thread-meta {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 18px;
-}
-.thread-body {
-    font-size: 16px;
-    line-height: 1.7;
-}
-.comment-avatar img {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-}
-.comment-content {
-    flex: 1;
-}
-
-.comment-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-}
-.comment-user {
-    font-weight: 600;
-    font-size: 14px;
-}
-
-.comment-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-}
-
-.comment-id {
-    color: var(--text-muted);
-    margin-right: 6px;
-}
-
-.comment-body {
-    font-size: 15px;
-    line-height: 1.65;
-    white-space: pre-wrap;
-	text-align:left;
-}
 
 .reply-box {
     margin-top: 20px;
@@ -374,6 +307,122 @@
         display:none;
     }
 }
+#detail-view {
+    max-width: 860px;
+    margin: 0 auto;
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 18px;
+    color: var(--primary-color);
+    font-size: 14px;
+}
+
+.comment-id {
+    color: var(--text-muted);
+    margin-right: 6px;
+}
+
+.inline-title{
+    font-size:30px;
+    font-weight:700;
+    margin-bottom:8px;
+	margin-left: 16px;
+	margin-right: 16px;
+}
+
+.inline-category{
+    font-size:14px;
+    color:#3c8d40;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-bottom:30px;
+}
+
+.inline-post{
+    display:flex;
+    gap:16px;
+    padding:26px 0;
+    border-top:1px solid #e5e7eb;
+}
+
+.inline-avatar{
+    width:40px;
+    height:40px;
+    border-radius:1%;
+    background:#e8792d;
+    color:#fff;
+    font-size:22px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+}
+
+.inline-post-body{
+    flex:1;
+}
+
+.inline-post-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+}
+
+.inline-user{
+    font-size:16px;
+}
+
+.inline-user b{
+    font-weight:700;
+}
+
+.inline-user span{
+    color:#6b7280;
+    margin-left:6px;
+}
+
+.inline-time{
+    color:#6b7280;
+    font-size:13px;
+}
+
+.inline-content{
+    font-size:16px;
+    line-height:1.7;
+}
+
+.inline-actions{
+  margin-top:10px;
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+}
+
+.inline-action-btn{
+  border:none;
+  background:none;
+  cursor:pointer;
+  color:#9ca3af;
+  padding:6px;
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.inline-action-btn:hover{
+  background:#f3f4f6;
+  color:#374151;
+}
+
+.like-btn.liked{
+  color:#e11d48;
+}
     </style>
 	<link rel="stylesheet" href="/static/markdown.min.css">
 </head>
@@ -381,7 +430,7 @@
 
     <header class="site-header">
         <div class="header-inner">
-            <a href="#" class="logo">stalltrix</a>
+            <a href="/index.php" class="logo">stalltrix</a>
             <div class="header-icons">
 	<a href="https://github.com/stalltrix/kepweb-multi"
    target="_blank" rel="noopener"
@@ -527,13 +576,13 @@ fill="none" stroke="currentColor" stroke-width="2">
         </div>
     </div>
 	<div id="detail-view" style="display:none">
-
+	<div class="inline-title" id="commit-title">Loading...</div>
+	<div class="inline-category">
 <a href="javascript:void(0)" class="back-link" onclick="app.goHome()">
 ← 返回列表
 </a>
-
 <p class="current-tag"> 当前位置: <span id="nowtag"></span></p>
-<div class="thread-main" id="thread-main"></div>
+</div>
 
 <div id="thread-content"></div>
 
@@ -548,9 +597,6 @@ fill="none" stroke="currentColor" stroke-width="2">
 </div>
 
 </div>
-
-    <div id="thread-content"></div>
-	
 
 
 </div>
@@ -580,7 +626,64 @@ z-index:999;">
     </div>
 
 </div>
-
+<div id="reg-modal" style="
+display:none;
+position:fixed;
+inset:0;
+background:rgba(0,0,0,0.4);
+align-items:center;
+justify-content:center;
+z-index:999;
+">
+<div style="
+background:#fff;
+padding:25px;
+border-radius:6px;
+width:300px;
+">
+<h3 style="margin-bottom:15px">注册</h3>
+<input id="email-input" type="email" placeholder="邮箱"
+style="width:100%;padding:8px;margin-bottom:10px">
+<div style="display:flex;margin-bottom:10px">
+<input id="code-input" type="text" placeholder="邮箱验证码"
+style="flex:1;padding:8px;margin-right:8px">
+<button class="login-btn" id="send-code-btn" onclick="sendCode()">发送</button>
+</div>
+<input id="reg-pass-input" type="password" placeholder="设置密码"
+style="width:100%;padding:8px;margin-bottom:10px">
+<input id="reg-pass2-input" type="password" placeholder="确认密码"
+style="width:100%;padding:8px;margin-bottom:10px">
+<div style="text-align:right">
+<button class="login-btn" onclick="doRegister()">注册</button>
+<button class="login-btn" onclick="closeRegister()">取消</button>
+</div>
+<div id="reg-msg" style="font-size:13px;color:#888;margin-top:10px"></div>
+<div style="margin-top:18px;padding-top:14px;border-top:1px solid #e9e9e9">
+<div style="font-size:13px;color:#919191;text-align:center;margin-bottom:12px">
+或使用第三方注册
+</div>
+<div style="display:flex;justify-content:center;gap:14px">
+<div onclick="location.href='#'" 
+style="width:36px;height:36px;border:1px solid #e9e9e9;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#fff">
+<svg height="20" width="20" viewBox="0 0 16 16" fill="currentColor">
+<path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 005.47 7.59c.4.07.55-.17.55-.38
+0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94
+-.09-.23-.48-.94-.82-1.13
+-.28-.15-.68-.52-.01-.53.63-.01
+1.08.58 1.23.82.72 1.21
+1.87.87 2.33.66.07-.52.28-.87.51-1.07
+-1.78-.2-3.64-.89-3.64-3.95
+0-.87.31-1.59.82-2.15
+-.08-.2-.36-1.02.08-2.12
+0 0 .67-.21 2.2.82a7.65 7.65 0 012-.27
+7.65 7.65 0 012 .27c1.53-1.04
+2.2-.82 2.2-.82.44 1.1.16
+1.92.08 2.12.51.56.82
+1.27.82 2.15 0 3.07-1.87
+3.75-3.65 3.95.29.25.54.73.54
+1.48 0 1.07-.01 1.93-.01
+2.2 0 .21.15.46.55.38A8.01
+8.01 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg></div></div></div></div></div>
 <div id="login-modal" style="
 display:none;
 position:fixed;
@@ -619,7 +722,10 @@ style="width:100%;padding:8px;margin-bottom:10px">
 
 <div id="login-msg"
 style="font-size:13px;color:#888;margin-top:10px"></div>
-
+<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e9e9e9;font-size:13px;color:#919191;text-align:center">
+没有账号？
+<span onclick="openRegister()" style="color:#0088cc;cursor:pointer">立即注册</span>
+</div>
 </div>
 
 </div>
@@ -812,6 +918,7 @@ goHome(){
 
     document.querySelector(".container").style.display="block";
     document.getElementById("detail-view").style.display="none";
+	document.title = 'stalltrix meta';
 },
 
 goPost(hex){
@@ -941,6 +1048,7 @@ async loadPost(hex){
 
     const container=document.getElementById("thread-content");
 	const mytag = document.getElementById('nowtag');
+	const title1=document.getElementById("commit-title");
 
     container.innerHTML="加载中";
 
@@ -948,15 +1056,20 @@ async loadPost(hex){
 
     if (!res.ok) {
         container.innerHTML = '<h3>页面不存在或已删除</h3>';
+        title1.innerText='404 - Page Not Found';
+        document.title='404 - Page Not Found';
         return
     }
 
     const data=await res.json();
 
     container.innerHTML="";
+	if (Array.isArray(data) && data.length != 0) {
+		const tag = TAG_MAP[data[0].tag] || {name:"未知",color:"#999"};
+		mytag.innerText = "/tag/"+tag.name+"("+String(data[0].tag)+")"
+	}
 	
-	const tag = TAG_MAP[data[0].tag] || {name:"未知",color:"#999"};
-	mytag.innerText = "/tag/"+tag.name+"("+String(data[0].tag)+")"
+	let topictitle=false;
 
     data.forEach(item => {
 	
@@ -976,11 +1089,11 @@ async loadPost(hex){
     const timeStr = item.post_time === item.first_time
   ? dateStr
   : `${firstPost} edited ${dateStr}`;
-    let displayName = this.escape(item.user);
+	let displayName = this.escape(item.user);
     let userSuffix = "";
     let avatar = "";
     let metaId = this.escape(item.meta);
-
+	
     if (metaObj) {
 
         if (metaObj.name) {
@@ -992,35 +1105,57 @@ async loadPost(hex){
         }
 
         if (metaObj.img) {
-            avatar = `<img src="${this.escape(metaObj.img)}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
+            avatar = `<img src="${this.escape(metaObj.img)}" style="width:40px;height:40px;border-radius:1%;vertical-align:middle;margin-right:6px;">`;
         } else {
 			const seed = encodeURIComponent(displayName);
-			avatar = `<img src="https://avatar.stalltrix.com/avatar/${seed}.svg" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px;">`;
+			avatar = `<img src="https://avatar.stalltrix.com/avatar/${seed}.svg" style="width:40px;height:40px;border-radius:1%;vertical-align:middle;margin-right:6px;">`;
 		}
-    }
+    } else {
+		const avatarLetter = displayName.charAt(0).toUpperCase();
+		avatar = `<div class="inline-avatar">${avatarLetter}</div>`;
+	}
 
     const el = document.createElement("div");
+	el.className = "inline-post";
+	let inactions = '';
+	let post_commit = '';
+	if ((item.id === 1)&&(!topictitle)) {
+		topictitle=true;
+		inactions = `<div class="inline-actions">
+<button class="inline-action-btn like-btn" onclick="toggleLike(this)">
+<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+<path d="M12 21s-7-4.35-7-10a4 4 0 017-2.65A4 4 0 0119 11c0 5.65-7 10-7 10z"></path></svg></button><button class="inline-action-btn link-btn" onclick="copyPostLink(${item.id})">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M10 13a5 5 0 0 1 0-7l2-2a5 5 0 0 1 7 7l-1 1"/>
+<path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 0 1-7-7l1-1"/></svg></button></div>`
+	const i = item.post.indexOf('\n');
+	let tt =i === -1 ? item.post : item.post.slice(0, i);
+	if (!tt.trimStart().startsWith('#')) {tt=displayName +"'s post";}
+	tt = tt.replace(/^#+/, '');
+	tt = tt.trimStart();
+	title1.innerText=tt;
+	post_commit = i === -1 ? ''  : item.post.slice(i + 1);
+	document.title = tt + ' - stalltrix';
+	} else {
+	post_commit=item.post;
+	}
+	
+
 
     el.innerHTML = `
-
-        <div class="comment-header">
-
-            <div class="comment-user">
-                ${avatar}<span class="comment-id">#${item.id}</span>
-                ${displayName} ${userSuffix}  
-				<span style="font-size:12px;color:#999"> · ${timeStr}</span>
-            </div>
-
-            <div class="comment-meta">
-                ${metaId}
-            </div>
-
+		${avatar}
+		<div class="inline-post-body">
+		
+        <div class="inline-post-header">
+			<div class="inline-user"> <span class="comment-id">#${item.id} </span><b>${displayName}</b> <span>${userSuffix}</span><span style="font-size:12px;color:#999"> · ${timeStr}</span></div>
+			<span class="inline-time"> ${metaId} </span>
         </div>
 
-        <div class="comment-body">
-            ${resolvMarkdown(item.post)}
+        <div class="inline-content">
+            ${resolvMarkdown(post_commit)}
         </div>
-
+		${inactions}
+		</div>
     `;
 
     container.appendChild(el);
@@ -1146,6 +1281,64 @@ function timeAgo(ts) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}days ago`;
 };
+function toggleLike(btn){
+  btn.classList.toggle("liked");
+};
+function copyPostLink(){
+  navigator.clipboard.writeText(window.location.href);
+  alert("链接已复制");
+};
+function sendCode() {
+  const email = document.getElementById("email-input").value.trim();
+  const msg = document.getElementById("reg-msg");
+  const btn = document.getElementById("send-code-btn");
+  const emailReg = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailReg.test(email)) {
+    msg.innerText = "请输入正确的邮箱地址";
+    return;
+  }
+  msg.innerText = "验证码已发送到 " + email;
+  let seconds = 60;
+  btn.disabled = true;
+  btn.style.background = "#e9e9e9";
+  btn.style.color = "#919191";
+  btn.style.cursor = "not-allowed";
+  btn.innerText = seconds + "s";
+  const timer = setInterval(function () {
+    seconds--;
+    btn.innerText = seconds + "s";
+    if (seconds <= 0) {
+      clearInterval(timer);
+      btn.disabled = false;
+      btn.style.background = "";
+      btn.style.color = "";
+      btn.style.cursor = "pointer";
+      btn.innerText = "发送";
+    }
+  }, 1000);
+}
+function doRegister() {
+  const email = document.getElementById("email-input").value;
+  const code = document.getElementById("code-input").value;
+  const pass = document.getElementById("reg-pass-input").value;
+  const pass2 = document.getElementById("reg-pass2-input").value;
+  if(pass.length < 8){
+    document.getElementById("reg-msg").innerText = "密码长度小于8位";
+    return;
+  }
+  if(pass !== pass2){
+    document.getElementById("reg-msg").innerText = "两次密码不一致";
+    return;
+  }
+  document.getElementById("reg-msg").innerText = "验证码无效";
+}
+function openRegister(){
+  app.closeLogin();
+  document.getElementById("reg-modal").style.display="flex";
+}
+function closeRegister(){
+  document.getElementById("reg-modal").style.display="none";
+}
 </script>
 
 </body>
