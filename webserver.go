@@ -111,6 +111,7 @@ var (
 	metaoff_file string
 	meta_off = make(map[string]struct{})
 	adminLock sync.Mutex
+	lastchange string
 	userInfo = make(map[string]UserInfo)
 	userLock sync.RWMutex
 	keyfile string
@@ -293,6 +294,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 		respReplies:=post.Replies
 		time_now:=time.Now().Unix()
 		if respReplies[0].MetaTime+3600 < time_now {
+		respReplies[0].MetaTime=time_now
 		for i:=range respReplies {
 		  _,ok:=meta_off[respReplies[i].User]
 		  if !ok {
@@ -302,7 +304,6 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		  }
 		}
-		respReplies[0].MetaTime=time_now
 		}
 	}
 	
@@ -846,7 +847,7 @@ func initData() {
 	will_change_reply=nil
 	}
 	
-	err=notify.Reg_fs(65534,callback_renew)
+	err=notify.Reg_fs(65534,callback_change)
 	if err!=nil {
 		logWarn.Println("reg tag err:",err)
 	}
@@ -905,6 +906,52 @@ func callback_renew(tag_id int){
 		logDebug.Println("debug: renew data:",tag)
         loadData(tag,true)
     }
+}
+
+func callback_change(tag_id int){
+	if tag_id!=65534{
+		logWarn.Println("reg tag err: !65534")
+        return
+	}
+    idxPath := filepath.Join(selfdir, "tag_65534.idx")
+    f, err := os.Open(idxPath)
+    if err != nil {
+		logWarn.Println("renew err:",err)
+        return
+    }
+    defer f.Close()
+
+    stat, err := f.Stat()
+    if err != nil {
+		logWarn.Println("renew err:",err)
+        return
+    }
+
+    size := stat.Size()
+	
+	const lineSize = 65
+
+    var changed_tag []string
+	for offset := size - lineSize; offset >= 0; offset -= lineSize {
+        buf := make([]byte, lineSize)
+
+        _, err := f.ReadAt(buf, offset)
+        if err != nil && err != io.EOF {
+			logWarn.Println("renew err:",err)
+            return
+        }
+		tag:=string(buf[:64])
+		if tag==lastchange {
+			logDebug.Println("debug: renew endof:",tag)
+			return
+		}
+		logDebug.Println("debug: renew data:",tag)
+        loadData(tag,true)
+		changed_tag=append(changed_tag,tag)
+    }
+	if len(changed_tag)>0{
+		lastchange=changed_tag[0]
+	}
 }
 
 func meHandler(w http.ResponseWriter, r *http.Request) {
