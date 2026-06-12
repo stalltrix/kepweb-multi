@@ -241,7 +241,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
         }
 			
 		limitNum:=limit.GetLimit("reply:"+uinfo.Name)
-		if limitNum > 120 {
+		if limitNum > 100 {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"status": "reply rate limit exceeded"}`))
 			return
@@ -623,7 +623,8 @@ func loadData(tag string,renew bool){
 								if timestamp > o_post.Replies[nowV.Y].Time{
 								first_time:=o_post.Replies[nowV.Y].FirstTime
 								meta_data:=o_post.Replies[nowV.Y].Meta
-								o_post.Replies[nowV.Y]=postcodec.Reply{ID: nowV.Y+1, User: string(domain), Meta: meta_data, Me: false, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
+								me_data:=o_post.Replies[nowV.Y].Me
+								o_post.Replies[nowV.Y]=postcodec.Reply{ID: nowV.Y+1, User: string(domain), Meta: meta_data, Me: me_data, Post: string(txt), Time: timestamp, FirstTime: first_time, Tag: o_tag_i, Hex: o_hex}
 								}
 							}
 						}}
@@ -749,7 +750,7 @@ func initData() {
 			for _,tag := range tags {
 				loadData(tag,false);}}
 	}
-	tags,err:=kepdb.ReadTag(65534)
+	/*tags,err:=kepdb.ReadTag(65534)
 	if err ==nil {
 	will_change_reply=make(map[string]postcodec.Reply);
 	for _,tag := range tags {
@@ -845,9 +846,9 @@ func initData() {
 		}
 	}
 	will_change_reply=nil
-	}
-	
-	err=notify.Reg_fs(65534,callback_change)
+	}*/
+	callback_change(65534)
+	err:=notify.Reg_fs(65534,callback_change)
 	if err!=nil {
 		logWarn.Println("reg tag err:",err)
 	}
@@ -931,7 +932,7 @@ func callback_change(tag_id int){
 	
 	const lineSize = 65
 
-    var changed_tag []string
+    var changed_tag string
 	for offset := size - lineSize; offset >= 0; offset -= lineSize {
         buf := make([]byte, lineSize)
 
@@ -947,10 +948,12 @@ func callback_change(tag_id int){
 		}
 		logDebug.Println("debug: renew data:",tag)
         loadData(tag,true)
-		changed_tag=append(changed_tag,tag)
+		if changed_tag=="" {
+			changed_tag=tag
+		}
     }
-	if len(changed_tag)>0{
-		lastchange=changed_tag[0]
+	if changed_tag!="" {
+		lastchange=changed_tag
 	}
 }
 

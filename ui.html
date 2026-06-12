@@ -918,6 +918,7 @@ goHome(){
 
     document.querySelector(".container").style.display="block";
     document.getElementById("detail-view").style.display="none";
+	document.getElementById("commit-title").innerText="Loading...";
 	document.title = 'stalltrix meta';
 },
 
@@ -1130,11 +1131,14 @@ async loadPost(hex){
 <path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 0 1-7-7l1-1"/></svg></button></div>`
 	const i = item.post.indexOf('\n');
 	let tt =i === -1 ? item.post : item.post.slice(0, i);
-	if (!tt.trimStart().startsWith('#')) {tt=displayName +"'s post";}
+	if (!tt.trimStart().startsWith('#')) {tt=displayName +"'s post";
+		post_commit=item.post;
+	} else {
+		post_commit = i === -1 ? ''  : item.post.slice(i + 1);
+	}
 	tt = tt.replace(/^#+/, '');
 	tt = tt.trimStart();
 	title1.innerText=tt;
-	post_commit = i === -1 ? ''  : item.post.slice(i + 1);
 	document.title = tt + ' - stalltrix';
 	} else {
 	post_commit=item.post;
@@ -1200,7 +1204,7 @@ async submitReply(){
     const data = await res.json();
 
     if (data.status==="reply rate limit exceeded"){
-        alert("每半天最多回复120个帖子");
+        alert("每半天最多回复100个帖子");
 		return
     }
 	
