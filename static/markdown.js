@@ -1,5 +1,5 @@
 /**
- * kep markdown resolv v0.3 - a safe markdown parser
+ * kep markdown resolv v0.3.1 - a safe markdown parser
  * Copyright (c) 2024-2026, ALL kep Contributors. (MIT Licensed)
  * require marked v15.0.12
  */
@@ -76,6 +76,7 @@ function resolvMarkdown(input){
 	let preText = escapeHTML(input);
 	preText = renderVideoShortcut(preText);
     preText = preText.replace(/\n&gt; /gi,"\n> ")
+	if (preText.startsWith("&gt; ")) {preText = "> " + preText.slice(5);}
     let html = marked.parse(preText);
     html = html
         .replace(/&lt;br&gt;/gi,"<br>")
