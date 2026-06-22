@@ -1,5 +1,5 @@
 /**
- * kep markdown resolv v0.3.1 - a safe markdown parser
+ * kep markdown resolv v0.3.2 - a safe markdown parser
  * Copyright (c) 2024-2026, ALL kep Contributors. (MIT Licensed)
  * require marked v15.0.12
  */
@@ -48,17 +48,32 @@ const renderer = {
     return `<code>${htm}</code>`;
   },
    link({ href, title, tokens }) {
-    if (!/^https?:\/\//i.test(href)) {
-      return this.parser.parseInline(tokens);
-    }
+	if ((/^https?:\/\//i.test(href)) || (href.startsWith("/index.php?topic=")&&(!href.includes("&"))&&(!href.includes("%"))) || href.startsWith("/t/topic/")) {
     const text = this.parser.parseInline(tokens);
     return `<a href="${href}" target="_blank" rel="noopener noreferrer nofollow"${
       title ? ` title="${escapeHTML(title)}"` : ""
     }>${text}</a>`;
+	}
+    return this.parser.parseInline(tokens);
   },
   image({ href, title, text }) {
     if (!/^https?:\/\//i.test(href)) {
       return '!{Image Broken}';
+    }
+    if (text) {
+     const parts = text.split("|");
+     if (parts.length === 2) {
+      const name = parts[0];
+      const [width, height] = parts[1].split("x").map(Number);
+
+      if (!Number.isNaN(width) && !Number.isNaN(height)) {
+		   if (width>0 && height>0 && width<5000 && height<5000) {
+                return `<img src="${href}" width="${width}" height="${height}" alt="${escapeHTML(name)}"${
+          title ? ` title="${escapeHTML(title)}"` : ""
+        }>`;
+		   }
+      }
+     }
     }
     return `<img src="${href}" alt="${escapeHTML(text)}"${
       title ? ` title="${escapeHTML(title)}"` : ""
