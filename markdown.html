@@ -2,10 +2,9 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>Stalltrix K 编辑器</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>stalltrix 编辑器</title>
 <link rel="stylesheet" href="static/markdown.min.css">
-
 <style>
 
 :root{
@@ -44,47 +43,97 @@ header{
 }
 
 .container{
-    max-width:1600px;
     margin:auto;
     padding:0 20px 20px;
-}
-
-.editor-layout{
-    display:flex;
-    gap:20px;
-}
-
-.card{
-    background:var(--card-bg);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow);
-    padding:20px;
-}
-
-.editor{
-    flex:1;
+    height:100vh;
     display:flex;
     flex-direction:column;
 }
 
+.toolbar{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  padding:8px 10px;
+  background:#fff;
+  border-bottom:1px solid #e5e5e5;
+}
+
+.toolbar button{
+  width:32px;
+  height:32px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border:none;
+  border-radius:6px;
+
+  background:transparent;
+  color:#666;
+
+  cursor:pointer;
+
+  transition:
+    background .15s ease,
+    color .15s ease;
+}
+
+.toolbar button:hover{
+  background:#f3f3f3;
+  color:#111;
+}
+
+.toolbar button:active{
+  background:#eaeaea;
+}
+
+.toolbar button svg{
+  width:18px;
+  height:18px;
+
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.6;
+
+  stroke-linecap:round;
+  stroke-linejoin:round;
+
+  vector-effect:non-scaling-stroke;
+}
+
+.editor-layout{
+    flex:1;
+    display:flex;
+    gap:20px;
+    overflow:hidden;
+}
+
+.editor-pane,
+.preview-pane{
+  width:50%;
+  height:92%;
+}
+
 textarea{
-    width:100%;
-    min-height:420px;
-    resize:vertical;
-    border:1px solid var(--border-color);
-    border-radius:4px;
-    padding:10px;
-    font-size:14px;
-    font-family:monospace;
+  width:100%;
+  height:100%;
+  border:none;
+  outline:none;
+  resize:none;
+  padding:20px;
+  font-size:16px;
+  line-height:1.6;
+  font-family:Consolas,monospace;
 }
 
 .preview{
-    flex:1;
-    overflow:auto;
-}
-
-.markdown-body{
-    max-width:900px;
+  height:100%;
+  overflow:auto;
+  background:#fff;
+  padding:20px;
+  border-left:1px solid #ddd;
 }
 
 .editor-toolbar{
@@ -131,20 +180,6 @@ textarea{
 
 .btn:hover{
     background:var(--primary-hover);
-}
-
-pre{
-    background:#2d2d2d;
-    color:#fff;
-    padding:12px;
-    border-radius:4px;
-    overflow:auto;
-}
-
-code{
-    background:#f3f3f3;
-    padding:2px 4px;
-    border-radius:3px;
 }
 
 .msg-box{
@@ -200,8 +235,32 @@ code{
 }
 
 @media (max-width:900px){
-    .editor-layout{
-        flex-direction:column;
+.container{
+    height:auto;
+    min-height:100dvh;
+}
+
+.editor-layout{
+    flex-direction:column;
+    overflow:visible;
+    height:auto;
+    }
+
+.editor-pane,
+.preview-pane{
+    width:100%;
+    height:auto;
+    }
+
+    textarea{
+    min-height:50vh;
+    height:auto;
+    }
+
+.preview{
+    height:auto;
+    border-left:none;
+    border-top:1px solid #ddd;
     }
 }
 
@@ -212,17 +271,90 @@ code{
 
 <header>
 <div class="nav-inner">
-<div class="logo" onclick="goHome()">Stalltrix K 编辑器</div>
+<div class="logo" onclick="goHome()">Stalltrix 编辑器</div>
 </div>
 </header>
 
 <div class="container">
+  <div class="toolbar">
+
+  <button title="加粗" onclick="wrap('**','**')">
+  <svg viewBox="0 0 24 24">
+    <path d="M7 5h6a3.5 3.5 0 010 7H7z"/>
+    <path d="M7 12h7a3.5 3.5 0 010 7H7z"/>
+  </svg>
+</button>
+
+  <button title="斜体" onclick="wrap('*','*')">
+  <svg viewBox="0 0 24 24">
+    <line x1="10" y1="4" x2="18" y2="4"/>
+    <line x1="6" y1="20" x2="14" y2="20"/>
+    <line x1="14" y1="4" x2="10" y2="20"/>
+  </svg>
+</button>
+
+  <button title="标题" onclick="linePrefix('## ')">
+  <svg viewBox="0 0 24 24">
+    <line x1="4" y1="6" x2="4" y2="18"/>
+    <line x1="10" y1="6" x2="10" y2="18"/>
+    <line x1="4" y1="12" x2="10" y2="12"/>
+    <line x1="15" y1="10" x2="21" y2="10"/>
+    <line x1="18" y1="7" x2="18" y2="13"/>
+  </svg>
+</button>
+
+ <button title="列表" onclick="linePrefix('- ')">
+  <svg viewBox="0 0 24 24">
+    <line x1="9" y1="7" x2="20" y2="7"/>
+    <line x1="9" y1="12" x2="20" y2="12"/>
+    <line x1="9" y1="17" x2="20" y2="17"/>
+    <circle cx="5" cy="7" r="1"/>
+    <circle cx="5" cy="12" r="1"/>
+    <circle cx="5" cy="17" r="1"/>
+  </svg>
+</button>
+
+  <button title="引用" onclick="linePrefix('> ')">
+  <svg viewBox="0 0 24 24">
+    <path d="M7 8H4v5h4v3H5"/>
+    <path d="M17 8h-3v5h4v3h-3"/>
+  </svg>
+</button>
+
+  <button title="代码块"
+        onclick="insertBlock('```js\n','\n```','代码')">
+  <svg viewBox="0 0 24 24">
+    <polyline points="8 8 3 12 8 16"/>
+    <polyline points="16 8 21 12 16 16"/>
+    <line x1="14" y1="5" x2="10" y2="19"/>
+  </svg>
+</button>
+
+  <button title="链接"
+        onclick="wrap('[','](https://)')">
+  <svg viewBox="0 0 24 24">
+    <path d="M10 13a5 5 0 007 0l2-2a5 5 0 00-7-7l-1 1"/>
+    <path d="M14 11a5 5 0 00-7 0l-2 2a5 5 0 007 7l1-1"/>
+  </svg>
+</button>
+
+  <button title="图片"
+        onclick="insert('![img](https://)')">
+  <svg viewBox="0 0 24 24">
+    <rect x="3" y="5" width="18" height="14" rx="2"/>
+    <circle cx="8.5" cy="10" r="1.5"/>
+    <path d="M21 16l-5-5-8 8"/>
+  </svg>
+</button>
+
+</div>
 
 <div class="editor-layout">
 
-<div class="editor card">
+    <div class="editor-pane">
+<textarea id="markdownInput" placeholder="# 帖子标题
 
-<textarea id="markdownInput">
+内容">
 # 帖子标题
 
 内容
@@ -232,7 +364,6 @@ code{
 - 项目二
 - 项目三
 </textarea>
-
 <div class="editor-toolbar">
 
 <div class="toolbar-item" id="tagBox">
@@ -247,9 +378,13 @@ code{
 					<option value="6">数据/AI (6)</option>
 					<option value="7">项目/开源 (7)</option>
 					<option value="8">数码/电脑 (8)</option>
-					<option value="9">游戏/水 (9)</option>
+					<option value="9">龙门阵 (9)</option>
 					<option value="10">行业资讯 (10)</option>
 					<option value="11">公告/张贴 (11)</option>
+					<option value="12">服务器技术 (12)</option>
+					<option value="13">游戏 (13)</option>
+					<option value="14">闲聊 (14)</option>
+					<option value="15">推广 (15)</option>
 </select>
 </div>
 
@@ -257,15 +392,12 @@ code{
 <label>权限</label>
 <input id="permInput" type="number" min="0" max="255" value="0">
 </div>
-
-</div>
-
 <button class="btn" id="postBtn" onclick="postMarkdown()">立即发帖</button>
-
 </div>
+    </div>
 
-<div class="preview card">
-<div id="preview" class="markdown-body"></div>
+    <div class="preview-pane">
+      <div id="preview" class="preview markdown-body"></div>
 </div>
 
 </div>
@@ -294,6 +426,11 @@ document.getElementById("msgBtn").style.display="none";
 }
 
 function showMsg(text,redirect=false){
+if (!redirect){
+document.getElementById("msgBtn").style.backgroundColor="red";
+}else{
+document.getElementById("msgBtn").style.backgroundColor="var(--primary-color)";
+}
 document.getElementById("spinner").style.display="none";
 document.getElementById("msgText").innerText=text;
 document.getElementById("msgBtn").style.display="inline-block";
@@ -331,6 +468,9 @@ async function checkLogin() {
     }
 }
 
+const input = document.getElementById('markdownInput');
+const preview = document.getElementById('preview');
+
 function postMarkdown(){
 
 const btn=document.getElementById("postBtn");
@@ -338,7 +478,7 @@ btn.disabled=true;
 
 showLoading();
 
-const markdown=document.getElementById("markdownInput").value;
+const markdown=input.value;
 let tag=document.getElementById("tagInput").value;
 const perm=document.getElementById("permInput").value;
 
@@ -380,6 +520,7 @@ else if(data.trim()==="access deny"){
 showMsg("没有权限");
 }
 else if(data.trim()==="post format err"){
+checkLogin();
 showMsg("格式错误");
 }
 else if(data.trim()==="duplicate"){
@@ -417,19 +558,122 @@ editData = JSON.parse(data);
 
 editMode = true;
 
-document.getElementById("markdownInput").value = editData.content;
+input.value = editData.content;
+input.placeholder="";
 
 document.getElementById("postBtn").innerText = "保存修改";
 document.getElementById("tagBox").style.display="none";
 }
 
-function renderMarkdown(){
-const input=document.getElementById("markdownInput").value;
-let html=resolvMarkdown(input);
-document.getElementById("preview").innerHTML=html;
+function renderMarkdown() {
+  preview.innerHTML = resolvMarkdown(input.value);
 }
 
-document.getElementById("markdownInput").addEventListener("input",renderMarkdown);
+function wrap(before, after) {
+  const start = input.selectionStart;
+  const end = input.selectionEnd;
+
+  const selected = input.value.slice(start, end);
+
+  if (selected) {
+    const text = before + selected + after;
+
+    input.setRangeText(text, start, end, 'select');
+
+    input.selectionStart = start + before.length;
+    input.selectionEnd = start + before.length + selected.length;
+  } else {
+    const text = before + after;
+
+    input.setRangeText(text, start, end, 'end');
+
+    const cursor = start + before.length;
+
+    input.selectionStart = cursor;
+    input.selectionEnd = cursor;
+  }
+
+  input.focus();
+  renderMarkdown();
+}
+
+function linePrefix(prefix) {
+  const start = input.selectionStart;
+  const end = input.selectionEnd;
+
+  const value = input.value;
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+
+  let lineEnd = value.indexOf('\n', end);
+
+  if (lineEnd === -1) {
+    lineEnd = value.length;
+  }
+
+  const selectedLines = value.slice(lineStart, lineEnd);
+
+  const replaced = selectedLines
+    .split('\n')
+    .map(line => {
+      if (line.trim() === '') return line;
+      return prefix + line;
+    })
+    .join('\n');
+
+  input.setRangeText(replaced, lineStart, lineEnd, 'end');
+
+  input.focus();
+  renderMarkdown();
+}
+function insertBlock(before, after, placeholder = '') {
+  const start = input.selectionStart;
+  const end = input.selectionEnd;
+
+  const selected = input.value.slice(start, end);
+
+  const content = selected || placeholder;
+
+  const text = before + content + after;
+
+  input.setRangeText(text, start, end, 'end');
+
+  if (!selected && placeholder) {
+    const cursor = start + before.length;
+
+    input.selectionStart = cursor;
+    input.selectionEnd = cursor + placeholder.length;
+  }
+
+  input.focus();
+  renderMarkdown();
+}
+
+function insert(text) {
+  const start = input.selectionStart;
+  const end = input.selectionEnd;
+
+  input.setRangeText(text, start, end, 'end');
+
+  input.focus();
+  renderMarkdown();
+}
+
+input.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+    e.preventDefault();
+    wrap('**', '**');
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+    e.preventDefault();
+    wrap('*', '*');
+  }
+});
+document.querySelectorAll('.toolbar button').forEach(button => {
+  button.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+  });
+});
+input.addEventListener('input', renderMarkdown);
 
 checkLogin();
 initEditMode();

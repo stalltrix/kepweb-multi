@@ -11,6 +11,7 @@
 	"db_pass": "",
 	"perm_file": "",
 	"metaoff_file": "",
+	"skip_ssl_check": false,
 	"neighbors": [
 		{
 			"url": "http://127.0.0.1:8081",

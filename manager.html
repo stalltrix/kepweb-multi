@@ -238,6 +238,7 @@ input,textarea{
 <input id="topPostID" placeholder="输入帖子ID">
 
 <button class="btn" onclick="topPost()">置顶</button>
+<button class="btn" onclick="delTop()">取消</button>
 
 </div>
 
@@ -471,6 +472,12 @@ api("top",id).then(res=>{
 alert(res.state)
 })
 
+}
+
+function delTop(){
+api("top","del").then(res=>{
+alert(res.state)
+})
 }
 
 function tagPost(){

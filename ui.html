@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>stalltrix meta</title>
+    <title>stalltrix</title>
     <style>
         :root {
             --primary-color: #0088cc;
@@ -423,6 +423,7 @@
 .like-btn.liked{
   color:#e11d48;
 }
+.post-own { font-size: 0.76rem; color: #b3b3b3; }
     </style>
 	<link rel="stylesheet" href="/static/markdown.min.css">
 </head>
@@ -496,10 +497,10 @@ fill="none" stroke="currentColor" stroke-width="2">
     </header>
     <div class="container">
         <nav class="nav-filters">
-            <a href="#">所有分类 ▾</a>
+            <a href="#" onclick="app.changeTag(-1)">所有分类 ▾</a>
             <a href="#">标签 ▾</a>
-            <a href="#" class="active">最新</a>
-            <a href="#">热门</a>
+            <a id="thenew" href="#" class="active" onclick="app.changeTag(-1)">最新</a>
+            <a id="thernd" href="#" onclick="app.changeTag(-2)">热门</a>
             <a href="#">未读</a>
         </nav>
         <div class="main-layout">
@@ -509,7 +510,7 @@ fill="none" stroke="currentColor" stroke-width="2">
 </div>
     <div class="topic-list-header">
         <div>主题</div>
-        <div>参与者</div>
+        <div>发起者</div>
         <div>回复</div>
         <div>浏览</div>
         <div style="text-align:right;">活动</div>
@@ -523,53 +524,69 @@ fill="none" stroke="currentColor" stroke-width="2">
             <aside class="sidebar">
     <div class="sidebar-title">分类目录</div>
     <ul class="category-list">
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(0)">
             <div><span class="badge-color" style="background-color:#999999;"></span> 保留</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(1)">
             <div><span class="badge-color" style="background-color:#BF1E2E;"></span> 运营反馈</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(2)">
             <div><span class="badge-color" style="background-color:#0E76BD;"></span> 计算机网络</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(3)">
             <div><span class="badge-color" style="background-color:#3AB54A;"></span> 软件开发</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(4)">
             <div><span class="badge-color" style="background-color:#8E44AD;"></span> 富(多)媒体</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(5)">
             <div><span class="badge-color" style="background-color:#C0392B;"></span> 安全/密码学</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(6)">
             <div><span class="badge-color" style="background-color:#16A085;"></span> 数据/AI</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(7)">
             <div><span class="badge-color" style="background-color:#27AE60;"></span> 项目/开源</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(8)">
             <div><span class="badge-color" style="background-color:#2C3E50;"></span> 数码/电脑</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
-            <div><span class="badge-color" style="background-color:#F7941D;"></span> 游戏/水</div>
-            <span class="stats">0</span>
+        <li class="category-item" onclick="app.changeTag(9)">
+            <div><span class="badge-color" style="background-color:#F7941D;"></span> 龙门阵</div>
+            <span class="stats">-</span>
         </li>
-        <li class="category-item">
+        <li class="category-item" onclick="app.changeTag(10)">
             <div><span class="badge-color" style="background-color:#7F8C8D;"></span> 行业资讯</div>
-            <span class="stats">0</span>
+            <span class="stats">-</span>
         </li>
-		<li class="category-item">
-            <div><span class="badge-color" style="background-color:#C4A812;"></span> 公告张贴</div>
-            <span class="stats">0</span>
+		<li class="category-item" onclick="app.changeTag(11)">
+            <div><span class="badge-color" style="background-color:#F2D84A;"></span> 公告张贴</div>
+            <span class="stats">-</span>
+        </li>
+		<li class="category-item" onclick="app.changeTag(12)">
+            <div><span class="badge-color" style="background-color:#14CADD;"></span> 服务器技术</div>
+            <span class="stats">-</span>
+        </li>
+		<li class="category-item" onclick="app.changeTag(13)">
+            <div><span class="badge-color" style="background-color:#9CD0BD;"></span> 游戏</div>
+            <span class="stats">-</span>
+        </li>
+		<li class="category-item" onclick="app.changeTag(14)">
+            <div><span class="badge-color" style="background-color:#679514;"></span> 闲聊</div>
+            <span class="stats">-</span>
+        </li>
+		<li class="category-item" onclick="app.changeTag(15)">
+            <div><span class="badge-color" style="background-color:#C4A812;"></span> 推广</div>
+            <span class="stats">-</span>
         </li>
     </ul>
 </aside>
@@ -742,9 +759,13 @@ const TAG_MAP = {
     6: {name:"数据/AI", color:"#16A085"},
     7: {name:"项目/开源", color:"#27AE60"},
     8: {name:"数码/电脑", color:"#2C3E50"},
-    9: {name:"游戏/水", color:"#F7941D"},
+    9: {name:"龙门阵", color:"#F7941D"},
     10: {name:"行业资讯", color:"#7F8C8D"},
-    11: {name:"公告张贴", color:"#C4A812"}
+    11: {name:"公告张贴", color:"#F2D84A"},
+	12: {name:"服务器技术", color:"#14CADD"},
+    13: {name:"游戏", color:"#9CD0BD"},
+    14: {name:"闲聊", color:"#679514"},
+    15: {name:"推广", color:"#C4A812"}
 };
 
 const app = {
@@ -760,7 +781,9 @@ currentNonce: null,
 
 async init(){
 
-    const path = location.pathname;
+    const params = new URLSearchParams(location.search);
+	const path = location.pathname;
+	const tags = params.get("t");
 
     const match = path.match(/^\/t\/topic\/([a-zA-Z0-9]+)/);
 
@@ -773,8 +796,27 @@ async init(){
         document.querySelector(".container").style.display="none";
         document.getElementById("detail-view").style.display="block";
 
-        this.loadPost(hex);
+        await this.loadPost(hex);
+		
+		const hash = location.hash;
+		if (hash&&hash.length>1){
+			let floor=hash.slice(1);
+			if (/^\d+$/.test(floor)){
+				if (floor>2){floor--;}
+				setTimeout(() => {
+				const jumpto=document.getElementById(`floor-${floor}`);
+				if (jumpto){
+				jumpto.scrollIntoView();
+				}
+				},200);
+			}
+		}
 
+    }else if (/^\d+$/.test(tags)) {
+		if (tags&&tags.trim()!==''){
+			const tag = parseInt(tags);
+			if (!Number.isNaN(tag)&&tag>=0){this.changeTag(String(tag));}
+		}
     }else{
 
         await this.checkLogin();
@@ -811,19 +853,17 @@ document.getElementById("login-modal").style.display="none";
 async doLogin(){
 
 const user=document.getElementById("user-input").value.trim();
-const pass=document.getElementById("pass-input").value.trim();
+const token=document.getElementById("pass-input").value.trim();
 
 const msg=document.getElementById("login-msg");
 
-if(!user || !pass){
+if(!user || !token){
 
 msg.innerText="请输入用户名和密码";
 
 return;
 
 }
-
-const token=user+":"+pass;
 
 msg.innerText="登录中...";
 
@@ -839,7 +879,7 @@ headers:{
 
 credentials:"include",
 
-body:JSON.stringify({token})
+body:JSON.stringify({ user,token })
 
 });
 
@@ -910,16 +950,28 @@ async checkLogin(){
 },
 
 goHome(){
-    history.pushState(
-        {view:"home"},
+		let pushstate='';
+		if (this.currentTag&&this.currentTag!=="all"&&this.currentTag!=="rand"){
+			pushstate=`?t=${this.currentTag}`;
+		}
+		if (pushstate!==''){
+		history.pushState(
+        {},
+        "",
+        `/index.php${pushstate}`
+		);
+		} else {
+		history.pushState(
+        {},
         "",
         "/index.php"
-    );
+		);
+		}
 
     document.querySelector(".container").style.display="block";
     document.getElementById("detail-view").style.display="none";
 	document.getElementById("commit-title").innerText="Loading...";
-	document.title = 'stalltrix meta';
+	document.title = 'stalltrix';
 },
 
 goPost(hex){
@@ -927,7 +979,7 @@ goPost(hex){
     this.currentHex = hex;
 
     history.pushState(
-        {view:"post",hex},
+        {},
         "",
         `/t/topic/${hex}`
     );
@@ -961,6 +1013,8 @@ async loadIndex(){
     const data = await res.json();
 
     container.innerHTML="";
+	
+	const setTop = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="24" fill="#303030"/><g clip-path="url(#clip)"><path d="M10.696 17.504c2.639-2.638 5.774-2.565 9.182-.696L32.62 9.745l-.721-4.958L43.213 16.1l-4.947-.71-7.074 12.73c1.783 3.638 1.942 6.544-.697 9.182l-7.778-7.778L6.443 41.556l11.995-16.31-7.742-7.742Z" stroke="#ffffff"  stroke-width="4" stroke-linejoin="round"/></g><defs><clipPath id="clip"><path d="M0 0h48v48H0z" fill="white"/></clipPath></defs></svg>`;
 
     data.forEach(item=>{
 
@@ -983,6 +1037,7 @@ async loadIndex(){
 		  else if (v >= 1e4) pageView = f(1e3, 'K');
 		  else pageView = String(v);
 		}
+		const pinpost1 = (item.pintop && item.pintop ==1);
 		const tag = TAG_MAP[item.tag] || {name:"未知",color:"#999"};
 		let metaObj = null;
             try {
@@ -1020,11 +1075,12 @@ ${item.typeid}
         <span class="badge-color" style="background:${tag.color}"></span>
         ${tag.name}
     </div>
-	${typeBadge}
+	${typeBadge} ${pinpost1 ? setTop : ''}
 </div>
 
 <div class="posters">
     <img src="${this.escape(getAvatar(metaObj,item))}" title="${displayName}">
+	<span class="post-own">${displayName}</span>
 </div>
 
 <div class="stats">${item.reply}</div>
@@ -1044,7 +1100,6 @@ ${item.typeid}
     });
 
 },
-
 async loadPost(hex){
 
     const container=document.getElementById("thread-content");
@@ -1115,6 +1170,8 @@ async loadPost(hex){
 		const avatarLetter = displayName.charAt(0).toUpperCase();
 		avatar = `<div class="inline-avatar">${avatarLetter}</div>`;
 	}
+	
+	const canreply = this.isLogin ? `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" onclick="btnreply('${displayName}','${userSuffix}')"><path d="M10 9V5L3 12L10 19V15C15 15 18 16.5 21 20C20 14 17 9 10 9Z"  fill="#555"/></svg>`:'';
 
     const el = document.createElement("div");
 	el.className = "inline-post";
@@ -1128,7 +1185,7 @@ async loadPost(hex){
 <path d="M12 21s-7-4.35-7-10a4 4 0 017-2.65A4 4 0 0119 11c0 5.65-7 10-7 10z"></path></svg></button><button class="inline-action-btn link-btn" onclick="copyPostLink(${item.id})">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 <path d="M10 13a5 5 0 0 1 0-7l2-2a5 5 0 0 1 7 7l-1 1"/>
-<path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 0 1-7-7l1-1"/></svg></button></div>`
+<path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 0 1-7-7l1-1"/></svg></button>`+canreply+'</div>';
 	const i = item.post.indexOf('\n');
 	let tt =i === -1 ? item.post : item.post.slice(0, i);
 	if (!tt.trimStart().startsWith('#')) {tt=displayName +"'s post";
@@ -1141,6 +1198,7 @@ async loadPost(hex){
 	title1.innerText=tt;
 	document.title = tt + ' - stalltrix';
 	} else {
+	inactions = '<div class="inline-actions">'+canreply+'</div>';
 	post_commit=item.post;
 	}
 	
@@ -1150,7 +1208,7 @@ async loadPost(hex){
 		${avatar}
 		<div class="inline-post-body">
 		
-        <div class="inline-post-header">
+        <div class="inline-post-header" id="floor-${item.id}">
 			<div class="inline-user"> <span class="comment-id">#${item.id} </span><b>${displayName}</b> <span>${userSuffix}</span><span style="font-size:12px;color:#999"> · ${timeStr}</span></div>
 			<span class="inline-time"> ${metaId} </span>
         </div>
@@ -1180,7 +1238,10 @@ async submitReply(){
 
     const payload = document.getElementById("reply-text").value;
 
-    if(!payload) return;
+	if (!payload || payload.length<3) {
+        alert("回复不能为空");
+        return;
+    }
 
     const res = await fetch(`${this.apiBase}/view/${this.currentTag}/${this.currentHex}`,{
 
@@ -1228,6 +1289,26 @@ generateNonce(){
 return this.currentNonce+"_"+Math.random().toString(36).slice(2);
 },
 
+changeTag(tag){
+if (tag<0){
+if (tag==-1){
+document.getElementById("thenew").className="active";
+document.getElementById("thernd").className="";
+this.currentTag = "all";
+}else if (tag==-2){
+document.getElementById("thenew").className="";
+document.getElementById("thernd").className="active";
+this.currentTag = "rand";
+}
+history.pushState({}, "", `/index.php`);
+}else{
+this.currentTag = tag+'';
+history.pushState({t:this.currentTag}, "", `/index.php?t=${this.currentTag}`);
+}
+this.currentPage = 1;
+this.loadIndex();
+},
+
 escape(text){
     return text
         .replace(/&/g,"&amp;")
@@ -1240,23 +1321,46 @@ escape(text){
 }
 
 window.onload=()=>app.init()
-window.onpopstate = function(e){
+window.onpopstate = async function(e){
+	const params = new URLSearchParams(location.search);
+	const path = location.pathname;
+	const tags = params.get("t");
 
-    if(!e.state || e.state.view==="home"){
+    const match = path.match(/^\/t\/topic\/([a-zA-Z0-9]+)/);
 
-        app.goHome();
+    if(match){
 
-    }else if(e.state.view==="post"){
+        const hex = match[1];
 
-        app.currentHex = e.state.hex;
+        app.currentHex = hex;
 
         document.querySelector(".container").style.display="none";
         document.getElementById("detail-view").style.display="block";
 
-        app.loadPost(e.state.hex);
+        await app.loadPost(hex);
+		
+		const hash = location.hash;
+		if (hash&&hash.length>1){
+			let floor=hash.slice(1);
+			if (/^\d+$/.test(floor)){
+				if (floor>2){floor--;}
+				setTimeout(() => {
+				const jumpto=document.getElementById(`floor-${floor}`);
+				if (jumpto){
+				jumpto.scrollIntoView();
+				}
+				},200);
+			}
+		}
 
+    }else if (/^\d+$/.test(tags)) {
+		if (tags&&tags.trim()!==''){
+			const tag = parseInt(tags);
+			if (!Number.isNaN(tag)&&tag>=0){app.changeTag(String(tag));}
+		}
+    }else{
+        app.goHome();
     }
-
 };
 function getAvatar(item,ietm){
     if(item && item.img && item.img.trim() !== ""){
@@ -1277,6 +1381,16 @@ menuBtn.onclick = () => {
         window.location.href = "/about";
         return;
     }
+};
+function btnreply(user,publickey) {
+    let lastInput=document.getElementById('reply-text').value
+	if (publickey==="") {
+		lastInput=lastInput+'@'+user+' '
+	} else {
+		publickey=publickey.replace(/ /g, "");
+		lastInput=lastInput+'@'+user+publickey+' '
+	}
+	document.getElementById('reply-text').value=lastInput
 };
 function timeAgo(ts) {
   const diff = Math.floor((Date.now() - ts) / 1000);

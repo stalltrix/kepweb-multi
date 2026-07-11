@@ -1,5 +1,5 @@
 /**
- * kep markdown resolv v0.3.2 - a safe markdown parser
+ * kep markdown resolv v0.4 - a safe markdown parser
  * Copyright (c) 2024-2026, ALL kep Contributors. (MIT Licensed)
  * require marked v15.0.12
  */
@@ -48,17 +48,27 @@ const renderer = {
     return `<code>${htm}</code>`;
   },
    link({ href, title, tokens }) {
+	if (href.startsWith("https://meta.stalltrix.com/")||href.startsWith("https://www.kepdb.com/")){
+	const u = new URL(href);
+	if ((u.pathname=="/index.php" && u.search.startsWith("?topic=")) || u.pathname.startsWith("/t/topic/")){href=u.pathname+u.search+u.hash;}
+	}
 	if ((/^https?:\/\//i.test(href)) || (href.startsWith("/index.php?topic=")&&(!href.includes("&"))&&(!href.includes("%"))) || href.startsWith("/t/topic/")) {
     const text = this.parser.parseInline(tokens);
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer nofollow"${
+    if (href[0]==='/' && href[1]!=='/'){
+	return `<a href="${href}" rel="noopener"${
       title ? ` title="${escapeHTML(title)}"` : ""
     }>${text}</a>`;
 	}
-    return this.parser.parseInline(tokens);
+	return `<a href="${href}" target="_blank" rel="noopener noreferrer nofollow"${
+      title ? ` title="${escapeHTML(title)}"` : ""
+    }>${text}</a>`;
+	}
+    const text = this.parser.parseInline(tokens);
+	return `\[${text}\]\(${escapeHTML(href)}\)`
   },
   image({ href, title, text }) {
     if (!/^https?:\/\//i.test(href)) {
-      return '!{Image Broken}';
+	  return `!\[${text}\]\(${escapeHTML(href)}\)`
     }
     if (text) {
      const parts = text.split("|");

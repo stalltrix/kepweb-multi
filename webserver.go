@@ -35,6 +35,8 @@ import (
 	"github.com/stalltrix/kepweb/postdb"
 	"github.com/stalltrix/kepweb/postcodec"
 	"github.com/stalltrix/kepweb/mapvec"
+	"github.com/stalltrix/kepweb/randlist"
+	"net/netip"
 	"sync/atomic"
 )
 
@@ -48,6 +50,7 @@ type PostIndexView struct {
 	Tag      uint16 `json:"tag"`
 	TypeId   byte `json:"typeid"`
 	Meta     string `json:"meta"`
+	SetTop   byte `json:"pintop"`
 }
 
 type ReplyRequest struct {
@@ -59,6 +62,7 @@ type ReplyRequest struct {
 }
 
 type LoginType struct {
+	User    string    `json:"user"`
     Token   string    `json:"token"`
 }
 
@@ -112,6 +116,9 @@ var (
 	meta_off = make(map[string]struct{})
 	adminLock sync.Mutex
 	lastchange string
+	isTrustCF bool
+	trustFor netip.Addr
+	skipSSLchk bool
 	userInfo = make(map[string]UserInfo)
 	userLock sync.RWMutex
 	keyfile string
@@ -331,7 +338,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
         return
 	}
 	tag:=-1
-	if tagID != "all" {
+	if tagID != "all" && tagID != "rand" {
 		tag,err=strconv.Atoi(tagID)
 		if err !=nil {
 			http.Error(w, "invalid page", http.StatusBadRequest)
@@ -371,9 +378,10 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	var posts []*postcodec.Post
-	{
+	if tagID != "rand" {
 	diff :=make(map[string]bool)
 	i:=sortIdx
+	if top_post.Hex != "" {diff[top_post.Hex]=false;}
 	for j:=0;j<2048;j++{
 		i--
 		if tagID == "all" {
@@ -408,6 +416,21 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	} else {
+		if randlist.MustRenew() {
+			randlist.Renew(&sortList,sortIdx)
+		}
+		rndList:=randlist.GetList()
+		for i:=0;i<256;i++{
+			hex:=rndList[i]
+			if hex == "" {
+				break
+			}
+			post, ok := dbStore.Load(hex)
+			if ok {
+				posts = append(posts, post)
+			}
+		}
 	}
 
     start := (pageIdx - 1) * 16
@@ -422,10 +445,33 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     var resp []PostIndexView
-	if pageIdx==1 {
-		if top_post.Hex != "" {
-			resp = append(resp, top_post)
-		}
+	if pageIdx==1 && top_post.Hex != "" {
+			post_top,ok:=dbStore.Load(top_post.Hex)
+			if ok {
+			metaData:=""
+			if echoMeta {
+				_,ok:=meta_off[post_top.Owner]
+				if !ok {
+					metadata,err:=meta.Meta_get(post_top.Owner)
+					if err == nil {
+						metaData=metadata
+					}
+				}
+			}
+			line := strings.SplitN(post_top.Replies[0].Post, "\n", 2)[0]
+			lastView := "[置顶] "+strings.TrimPrefix(line, "# ")
+			resp = append(resp, PostIndexView{
+            Own:      post_top.Owner,
+            Lasttime: strconv.FormatInt(post_top.Replies[len(post_top.Replies)-1].Time, 10),
+            Reply:    len(post_top.Replies),
+            Lastview: lastView,
+			Hex: post_top.PostHex,
+			Tag: post_top.TagID,
+			TypeId: post_top.TypeID,
+			Meta: metaData,
+			SetTop :1,
+			})
+			}
 	}
     for _, p := range posts[start:end] {
         lastView := ""
@@ -561,7 +607,7 @@ func async_send(payload ReplyRequest,uinfo *UserInfo) (string,error) {
     msg := buf.Bytes()
 	hashHex := hex.EncodeToString(tHash)
 	go func(){
-	err = send.Nextmsg(msg,"")
+	err = send.Nextmsg(msg,"",skipSSLchk)
 	if err != nil {
 		logErr.Println("send msg err:",err)
 	}
@@ -740,7 +786,7 @@ for _,sub := range subs {
 }
 
 func initData() {
-	for i:=0;i<12;i++{
+	for i:=0;i<16;i++{
 		tags,err:=kepdb.ReadTag(i)
 		if err ==nil {
 			err=notify.Reg_fs(i,callback_renew)
@@ -980,7 +1026,65 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         w.Write([]byte(`{"status":0}`))
         return
     }
-	user_ip := r.Header.Get("CF-Connecting-IP")
+	
+	real_ip := r.RemoteAddr
+	if idx := strings.LastIndex(real_ip, ":"); idx != -1 {
+		real_ip = real_ip[:idx]
+		if len(real_ip)>2 && real_ip[0]=='[' && real_ip[len(real_ip)-1]==']' {
+			real_ip=real_ip[1:len(real_ip)-1]
+		}
+	}
+	
+	numIP, err := netip.ParseAddr(real_ip)
+    if err != nil {
+        w.Write([]byte(`{"status":0}`))
+        return
+    }
+	IsPrivateNet:=numIP.IsPrivate() || numIP.IsLoopback()
+	if trustFor.IsValid() && numIP==trustFor{
+		IsPrivateNet=true
+	}
+	user_ip := ""
+	if isTrustCF {
+		user_ip = r.Header.Get("CF-Connecting-IP")
+	} else {
+		if IsPrivateNet {
+			user_ip = r.Header.Get("X-Forwarded-For")
+			if user_ip=="" {
+				user_ip = real_ip
+			} else if strings.Index(user_ip, ",") != -1 {
+				getip:=false
+				cf_ip := r.Header.Get("CF-Connecting-IP")
+				ips := strings.Split(strings.ReplaceAll(user_ip, " ", ""), ",")
+				if len(ips) > 1 {
+					if ips[len(ips)-1]==cf_ip{
+						user_ip = cf_ip
+						getip=true
+					}
+				}
+				if !getip{
+					if len(ips) > 1 {
+						for i:=len(ips)-1;i>=0;i--{
+							ip,err:= netip.ParseAddr(ips[i])
+							if err == nil {
+								if !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsUnspecified() && numIP!=ip {
+									user_ip = ips[i]
+									getip=true
+									break
+								}
+							}
+						}
+					}
+					if !getip&&len(ips)!=0{
+						user_ip = ips[0]
+					}
+				}
+			}
+		} else {
+			user_ip = real_ip
+		}
+	}
+	
 	ipaddr := user_ip
 	if len(user_ip) > 19 {
 		ipaddr=user_ip[:19]
@@ -992,7 +1096,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
     }
 	userLock.RLock()
-	info,ok:=userInfo[req.Token]
+	info,ok:=userInfo[req.User+":"+req.Token]
 	userLock.RUnlock()
 	if !ok {
 		w.Write([]byte(`{"status":0}`))
@@ -1144,7 +1248,7 @@ func main() {
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/me", meHandler)
 	http.HandleFunc("/index.php", indexpage)
-	http.HandleFunc("/t/topic/", indexpage)
+	http.HandleFunc("/t/topic/", topicpage)
 	http.HandleFunc("/manager", managerHandler)
 	
 	staticFS, _ := fs.Sub(staticFiles, "static")
@@ -1166,7 +1270,20 @@ func main() {
 	if token_urlPort == "" {
 		token_urlPort="10428"
 	}
-	
+	if cfg.SkipSSLchk {
+		skipSSLchk=cfg.SkipSSLchk
+		logWarn.Println("Warn: skip SSL check: on")
+	}
+	if cfg.TrustCFIP {
+		isTrustCF=cfg.TrustCFIP
+	}
+	if cfg.TrustFor!="" {
+		trustFor,err=netip.ParseAddr(cfg.TrustFor)
+		if err != nil {
+			logger.Fatalln("Err: trust IP addr is invalid:",err)
+			return
+		}
+	}
 	patch_file=cfg.Permfile
 	if patch_file=="" {
 		patch_file=filepath.Join(self, "perm.ini")
@@ -1535,45 +1652,23 @@ case "tag":{
 	}
 	
 	post_tag.TagID=uint16(new_tag)
+	post_tag.Replies[0].Tag=post_tag.TagID
 	io.WriteString(w,`{"state":"OK"}`)
 }
 case "top":{
 	//置顶
+	if act=="del"{
+		top_post=PostIndexView{}
+		io.WriteString(w,`{"state":"del-top: OK"}`)
+		return
+	}
 	post_top,ok:=dbStore.Load(act)
 	if !ok {
 		io.WriteString(w,`{"state":"set-top: post not found"}`)
 		return
 	}
-	line := strings.SplitN(post_top.Replies[0].Post, "\n", 2)[0]
-    lastView := strings.TrimPrefix(line, "# ")
-	metaData:=""
-	if echoMeta {
-	  _,ok:=meta_off[post_top.Owner]
-	  if !ok {
-		metadata,err:=meta.Meta_get(post_top.Owner)
-		if err == nil {
-			metaData=metadata
-		}
-	  }
-	}
-	viewNum:=0
-	postKey, err := strconv.ParseUint(post_top.PostHex[:16], 16, 64)
-	if err==nil{
-		val,ok:=pageViews.Load(postKey)
-		if ok {
-			viewNum=int(*(val.(*int64)))
-		}
-	}
 	top_post=PostIndexView{
-            Own:      post_top.Owner,
-            Lasttime: strconv.FormatInt(post_top.Replies[len(post_top.Replies)-1].Time, 10),
-            Reply:    len(post_top.Replies),
-            Lastview: lastView,
 			Hex: post_top.PostHex,
-			Tag: post_top.TagID,
-			TypeId: post_top.TypeID,
-			Meta: metaData,
-			Views: viewNum,
         }
 	io.WriteString(w,`{"state":"set-top: OK"}`)
 }
@@ -1681,6 +1776,11 @@ case "del_neighbor":{
 default:{
     io.WriteString(w,`{"state":"not found"}`)
 }}
+}
+
+func topicpage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+    w.Write(fileIndex)
 }
 
 func indexpage(w http.ResponseWriter, r *http.Request) {
@@ -1796,7 +1896,11 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
 
         return
     }
-
+	hex := query.Get("topic")
+	if IsHex(hex) {
+		http.Redirect(w, r, "/t/topic/"+hex, http.StatusFound)
+		return
+	}
     w.Header().Set("Content-Type", "text/html; charset=utf-8")
     w.Write(fileIndex)
 }

@@ -28,6 +28,9 @@ type Config struct {
 	VecPass string     `json:"vec_pass"`
 	Permfile string   `json:"perm_file"`
 	Metaofffile string   `json:"metaoff_file"`
+	SkipSSLchk bool `json:"skip_ssl_check"`
+	TrustCFIP bool `json:"trust_cfip"`
+	TrustFor string `json:"trust_forwarded"`
     Neighbors []Neighbor `json:"neighbors"`
 }
 
