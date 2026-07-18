@@ -11,10 +11,8 @@ type Neighbor struct {
 }
 
 type Config struct {
-    MainKey   string     `json:"mainkey"`
-	Mainpriv   string     `json:"mainpriv"`
-    Keyfile    string     `json:"keyfile"`
-    Domain    string     `json:"domain"`
+    SQLip    string     `json:"sql_ip"`
+    SQLpass  string     `json:"sql_auth"`
 	ApiToken     string     `json:"api_token"`
 	Apiport     string     `json:"api_port"`
 	LogLevel string      `json:"log_level"`

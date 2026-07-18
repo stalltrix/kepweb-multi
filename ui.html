@@ -1295,6 +1295,11 @@ async submitReply(){
         alert("重复发送");
         return;
     }
+	
+	if (data.status==="send msg err"){
+        alert("发送失败，key配置错误");
+        return;
+	}
 
     document.getElementById("reply-text").value="";
 

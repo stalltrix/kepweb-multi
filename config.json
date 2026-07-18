@@ -1,11 +1,10 @@
 {
-	"mainkey": "mainkey.pub",
-	"mainpriv": "mainkey.priv",
 	"api_token": "[your api token]",
-	"keyfile": "key_data",
 	"log_level": "info",
 	"listen": "127.0.0.1:3000",
 	"ntp": "",
+	"sql_ip": "127.0.0.1:3306",
+	"sql_auth": "root:123456",
 	"db_file": "",
 	"db_addr": "",
 	"db_pass": "",
