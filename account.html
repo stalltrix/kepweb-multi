@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>用户偏好设置</title>
+
+  <style>
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:"Microsoft YaHei",sans-serif;
+    }
+
+    body{
+      background:#f5f6fa;
+      color:#333;
+    }
+
+    .container{
+      width:1100px;
+      margin:40px auto;
+      display:flex;
+      gap:20px;
+    }
+
+    .sidebar{
+      width:240px;
+      background:#fff;
+      border-radius:12px;
+      padding:20px;
+      box-shadow:0 2px 10px rgba(0,0,0,.05);
+    }
+
+    .user-box{
+      text-align:center;
+      margin-bottom:30px;
+    }
+
+    .user-box h3{
+      margin-bottom:6px;
+    }
+
+    .user-box p{
+      color:#888;
+      font-size:14px;
+    }
+
+    .menu{
+      list-style:none;
+    }
+
+    .menu li{
+      padding:12px 15px;
+      margin-bottom:10px;
+      border-radius:8px;
+      cursor:pointer;
+      transition:.2s;
+    }
+
+    .menu li:hover{
+      background:#eef3ff;
+    }
+
+    .menu li.active{
+      background:#4f7cff;
+      color:#fff;
+    }
+
+    .content{
+      flex:1;
+      background:#fff;
+      border-radius:12px;
+      padding:30px;
+      box-shadow:0 2px 10px rgba(0,0,0,.05);
+      min-height:700px;
+    }
+
+    .section-title{
+      font-size:26px;
+      margin-bottom:25px;
+    }
+
+    .form-group{
+      margin-bottom:20px;
+    }
+
+    .form-group label{
+      display:block;
+      margin-bottom:8px;
+      font-weight:bold;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select{
+      width:100%;
+      padding:12px;
+      border:1px solid #ddd;
+      border-radius:8px;
+      outline:none;
+      font-size:14px;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus{
+      border-color:#4f7cff;
+    }
+
+    .btn-area{
+      margin-top:30px;
+      display:flex;
+      gap:10px;
+    }
+
+    .btn{
+      padding:12px 22px;
+      border:none;
+      border-radius:8px;
+      cursor:pointer;
+      font-size:15px;
+      transition:.2s;
+    }
+
+    .btn-primary{
+      background:#4f7cff;
+      color:#fff;
+    }
+
+    .btn-primary:hover{
+      background:#3b67eb;
+    }
+
+    .btn-secondary{
+      background:#eee;
+      color:#333;
+    }
+
+    .modal-mask{
+      position:fixed;
+      left:0;
+      top:0;
+      width:100%;
+      height:100%;
+      background:rgba(0,0,0,.45);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:999;
+    }
+
+    .modal{
+      width:420px;
+      background:#fff;
+      border-radius:12px;
+      padding:25px;
+    }
+
+    .modal h3{
+      margin-bottom:20px;
+    }
+
+    .modal-actions{
+      margin-top:20px;
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+    }
+
+    .form-group textarea{
+      resize:vertical;
+      min-height:100px;
+    }
+
+    .userkey-item{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:15px;
+      border:1px solid #eee;
+      border-radius:10px;
+      margin-bottom:15px;
+      gap:20px;
+    }
+
+    .ok{
+      background:#e8f5e9;
+      color:#2e7d32;
+    }
+
+    .tag{
+      background:#e8f5e9;
+      color:#2e7d32;
+      padding:5px 10px;
+      border-radius:20px;
+      font-size:13px;
+      white-space:nowrap;
+    }
+
+    .userkey-item p{
+      margin-top:6px;
+      color:#666;
+      word-break:break-all;
+    }
+	
+.danger{
+  background:#ffeded;
+  color:#d32f2f;
+}
+
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <aside class="sidebar">
+
+    <div class="user-box">
+      <h3>个人信息</h3>
+      <p id="userText">加载中...</p>
+    </div>
+
+    <ul class="menu">
+      <li class="active" data-page="profile">信息修改</li>
+      <li data-page="changeinfo">账户设置</li>
+      <li data-page="security">账号安全</li>
+    </ul>
+
+  </aside>
+
+  <main class="content" id="content"></main>
+
+</div>
+
+<div class="modal-mask" id="domainModal">
+  <div class="modal">
+
+    <h3>修改域名</h3>
+
+    <div class="form-group">
+      <label>新域名</label>
+      <input type="domain" id="newDomainInput" placeholder="请输入新域名">
+    </div>
+
+    <div class="form-group">
+      <label>当前密码</label>
+      <input type="password" id="domainPasswordInput" placeholder="请输入当前密码">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="closeModalBtn">取消</button>
+      <button class="btn btn-primary" id="saveDomainBtn">确认修改</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+
+  const content = document.getElementById("content");
+  const menuItems = document.querySelectorAll(".menu li");
+
+  let userInfo = {
+    name: "",
+    domain: "",
+    csrf: "",
+    verified: false,
+    mainkey: "",
+    des: ""
+  };
+
+  async function api(url, method = "GET", data = null){
+
+    const options = {
+      method,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    };
+
+    if(data){
+      options.body = JSON.stringify(data);
+    }
+
+    const response = await fetch(url, options);
+
+    if(!response.ok){
+		const state=await response.json()
+		throw new Error(state.state);
+    }
+
+    return await response.json();
+
+  }
+
+  async function loadUserInfo(){
+
+    try{
+
+      const data = await api("/user/api/info");
+
+      userInfo = data;
+
+      document.getElementById("userText").innerText =
+        "用户：" + (userInfo.name || "");
+
+      const active = document.querySelector(".menu li.active");
+
+      renderPage(active.dataset.page);
+
+    }catch(err){
+
+      alert(err);
+
+    }
+
+  }
+
+  const pages = {
+
+    profile: () => `
+      <h2 class="section-title">系统信息</h2>
+
+      <div class="userkey-item">
+        <div>
+          <strong>绑定域名</strong>
+          <p>${userInfo.domain || ""}</p>
+        </div>
+
+        ${
+          userInfo.verified
+          ? `<span class="tag">已验证</span>`
+          : `<button class="btn danger" id="resendVerifyBtn">请求验证</button>`
+        }
+      </div>
+
+      <div class="userkey-item">
+        <div>
+          <strong>Mainkey base32</strong>
+          <p>${userInfo.mainkey || ""}</p>
+        </div>
+
+        <button
+          class="btn ok copy-btn"
+          data-copy="${userInfo.mainkey || ""}"
+        >
+          复制
+        </button>
+      </div>
+
+      <div class="userkey-item">
+        <div>
+          <strong>Pkey des</strong>
+          <p>${userInfo.des || ""}</p>
+        </div>
+
+        <button
+          class="btn ok copy-btn"
+          data-copy="${userInfo.des || ""}"
+        >
+          复制
+        </button>
+      </div>
+    `,
+
+    changeinfo: () => `
+      <h2 class="section-title">账户设置</h2>
+
+      <div class="form-group">
+        <label>昵称</label>
+        <input
+          type="text"
+          id="nicknameInput"
+          placeholder="请输入昵称"
+          value="${userInfo.name || ''}"
+        >
+      </div>
+
+      <div class="form-group">
+        <label>绑定域名</label>
+        <input
+          type="domain"
+          id="domainInput"
+          value="${userInfo.domain || ''}"
+          disabled
+        >
+      </div>
+
+      <div class="form-group">
+        <label>性别</label>
+        <select>
+          <option>保密</option>
+          <option>男</option>
+          <option>女</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>个性签名</label>
+        <textarea placeholder="介绍一下自己..."></textarea>
+     </div>
+
+      <div class="btn-area">
+        <button class="btn btn-primary" id="saveProfileBtn">
+          保存资料
+        </button>
+
+        <button class="btn btn-secondary" id="changeDomainBtn">
+          修改域名
+        </button>
+      </div>
+    `,
+
+    security: () => `
+      <h2 class="section-title">账号安全</h2>
+
+      <div class="form-group">
+        <label>当前密码</label>
+        <input type="password" id="oldPass">
+      </div>
+
+      <div class="form-group">
+        <label>新密码</label>
+        <input type="password" id="newPass">
+      </div>
+
+      <div class="form-group">
+        <label>确认新密码</label>
+        <input type="password" id="confirmPass">
+      </div>
+
+      <div class="btn-area">
+        <button class="btn btn-primary" id="savePassBtn">
+          修改密码
+        </button>
+      </div>
+    `
+  };
+
+  function renderPage(pageName){
+
+    content.innerHTML = pages[pageName]();
+
+    if(pageName === "profile"){
+
+      const resendBtn = document.getElementById("resendVerifyBtn");
+
+      if(resendBtn){
+
+        resendBtn.addEventListener("click", resendVerifyDomain);
+
+      }
+
+      document.querySelectorAll(".copy-btn").forEach(btn => {
+
+        btn.addEventListener("click", async () => {
+
+          try{
+
+            await navigator.clipboard.writeText(btn.dataset.copy);
+
+            const oldText = btn.innerText;
+
+            btn.innerText = "已复制";
+
+            setTimeout(() => {
+              btn.innerText = oldText;
+            }, 1500);
+
+          }catch(err){
+
+            alert("复制失败");
+
+          }
+
+        });
+
+      });
+
+    }
+
+    if(pageName === "changeinfo"){
+
+      document
+        .getElementById("changeDomainBtn")
+        .addEventListener("click", openDomainModal);
+
+      document
+        .getElementById("saveProfileBtn")
+        .addEventListener("click", saveProfile);
+
+    }
+
+    if(pageName === "security"){
+
+      document
+        .getElementById("savePassBtn")
+        .addEventListener("click", savePassword);
+
+    }
+
+  }
+
+  function saveProfile(){
+
+    const nickname = document.getElementById("nicknameInput").value;
+
+    alert("昵称已修改为：" + nickname);
+
+  }
+
+  async function savePassword(){
+
+    const oldPass = document.getElementById("oldPass").value.trim();
+    const newPass = document.getElementById("newPass").value.trim();
+    const confirmPass = document.getElementById("confirmPass").value.trim();
+
+    if(!oldPass || !newPass || !confirmPass){
+
+      alert("请填写你账户的密码");
+
+      return;
+
+    }
+
+    if(newPass !== confirmPass){
+
+      alert("两次密码不一致");
+
+      return;
+
+    }
+
+    try{
+
+      await api("/user/api/passwd", "POST", {
+        old: oldPass,
+        new: newPass,
+        csrf: userInfo.csrf
+      });
+
+      alert("密码修改成功");
+
+      document.getElementById("oldPass").value = "";
+      document.getElementById("newPass").value = "";
+      document.getElementById("confirmPass").value = "";
+
+    }catch(err){
+
+      alert(err);
+
+    }
+
+  }
+
+  async function resendVerifyDomain(){
+
+    try{
+
+      await api("/user/api/verifyrequest", "POST", {
+        csrf: userInfo.csrf
+      });
+
+      alert("已开始验证域名TXT记录");
+
+    }catch(err){
+
+      alert(err);
+
+    }
+
+  }
+
+  function openDomainModal(){
+
+    document.getElementById("domainModal").style.display = "flex";
+
+    document.getElementById("newDomainInput").value =
+      userInfo.domain || "";
+
+    document.getElementById("domainPasswordInput").value = "";
+
+  }
+
+  function closeDomainModal(){
+
+    document.getElementById("domainModal").style.display = "none";
+
+  }
+
+  async function saveDomain(){
+
+    const domain = document.getElementById("newDomainInput").value.trim();
+    const pass = document.getElementById("domainPasswordInput").value.trim();
+
+    if(!domain || !pass){
+
+      alert("请填写你账户的密码");
+
+      return;
+
+    }
+
+    try{
+
+      await api("/user/api/domain", "POST", {
+        pass,
+        domain,
+        csrf: userInfo.csrf
+      });
+
+      alert("域名修改成功");
+
+      closeDomainModal();
+
+      await loadUserInfo();
+
+    }catch(err){
+
+      alert(err);
+
+    }
+
+  }
+
+  renderPage("profile");
+
+  loadUserInfo();
+
+  menuItems.forEach(item => {
+
+    item.addEventListener("click", () => {
+
+      menuItems.forEach(li => li.classList.remove("active"));
+
+      item.classList.add("active");
+
+      renderPage(item.dataset.page);
+
+    });
+
+  });
+
+  document
+    .getElementById("closeModalBtn")
+    .addEventListener("click", closeDomainModal);
+
+  document
+    .getElementById("saveDomainBtn")
+    .addEventListener("click", saveDomain);
+
+</script>
+
+</body>
+</html>

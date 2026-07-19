@@ -144,13 +144,9 @@ func Set(key string, val interface{}, id int) error {
         return err
     }
 
-    rows, err := result.RowsAffected()
+    _, err = result.RowsAffected()
     if err != nil {
         return err
-    }
-
-    if rows == 0 {
-        return NotFoundErr
     }
 
     return nil

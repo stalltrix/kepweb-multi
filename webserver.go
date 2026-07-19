@@ -39,6 +39,7 @@ import (
 	"sync/atomic"
 	"kepweb-multi/sql"
 	"encoding/base64"
+	"kepweb-multi/user"
 )
 
 type PostIndexView struct {
@@ -75,14 +76,6 @@ type indexCache struct {
 type tokenLimiter struct {
     limiter   *rate.Limiter
     lastUsed  int64
-}
-
-type UserInfo struct {
-    UserID  string
-	ID int
-	Name string
-	Nonce string
-	sess *time.Timer
 }
 
 var (
@@ -193,14 +186,14 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	is_login := false
-	var uinfo *UserInfo
+	var uinfo *user.UserInfo
 	cookie, err := r.Cookie("seesion")
 	if err == nil {
 		if cookie.Value != "" {
 			var val interface{}
 			val,is_login=sessMap.Load(cookie.Value)
 			if is_login {
-				uinfo=val.(*UserInfo)
+				uinfo=val.(*user.UserInfo)
 			}
 		}
 	}
@@ -226,6 +219,16 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	
 	if !is_login {
 		if post.TypeID != 0 {
+			http.Error(w, "post not found", http.StatusNotFound)
+			return
+		}
+		_,ok:=patch_perm[postHex]
+		if ok {
+			http.Error(w, "post not found", http.StatusNotFound)
+			return
+		}
+	} else if !uinfo.Is_admin {
+		if post.TypeID > 64 {
 			http.Error(w, "post not found", http.StatusNotFound)
 			return
 		}
@@ -537,7 +540,12 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func async_send(payload ReplyRequest,uinfo *UserInfo) (string,error) {
+func async_send(payload ReplyRequest,uinfo *user.UserInfo) (string,error) {
+	is_verified:=sql.GetByID("verified",uinfo.ID)
+	if is_verified!="1"&&is_verified!="true"{
+		return "",os.ErrPermission
+	}
+	
 	priv_base64:=sql.GetByID("priv_key",uinfo.ID)
 	pub_base64:=sql.GetByID("pub_key",uinfo.ID)
 	signKey_base64:=sql.GetByID("sign_key",uinfo.ID)
@@ -1034,7 +1042,7 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"status":0}`))
 			return
 		}
-		info:=val.(*UserInfo)
+		info:=val.(*user.UserInfo)
 		
 		w.Write([]byte(`{"status":1,"user":"`+info.Name+`","nonce":"`+post_prefix+"_"+info.Nonce+`"}`))
 }
@@ -1062,13 +1070,13 @@ func logoffHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		expired:=val.(*UserInfo)
+		expired:=val.(*user.UserInfo)
 		
 		if !strings.HasPrefix(req.Nonce,post_prefix+"_"+expired.Nonce) {
 			w.Write([]byte(`{"status":0}`))
 			return
 		}
-		expired.sess.Stop()
+		expired.Sess.Stop()
 		sessMap.Delete(cookie.Value)
 		w.Write([]byte(`{"status":1}`))
 }
@@ -1219,11 +1227,14 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	domain:=sql.GetByID("domain",id)
+	
+	admin:=sql.GetByID("is_admin",id)
 
-	info:=&UserInfo {
+	info:=&user.UserInfo {
 		UserID: req.User,
 		Name: domain,
 		ID: id,
+		Is_admin: admin=="admin",
 		Nonce: newNonce,
 	}
 	
@@ -1231,7 +1242,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	expired:=time.AfterFunc(3600*24*15*time.Second, func() {
 		sessMap.Delete(sess)
 	})
-	info.sess=expired
+	info.Sess=expired
 	w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"https://avatar.stalltrix.com/avatar","nonce":"`+post_prefix+"_"+info.Nonce+`"}`))
 }
 
@@ -1259,6 +1270,12 @@ func main() {
 	if err!=nil {
 		logger.Fatalln("can't read login.html",err)
 	}
+	
+	dashPage,err:=os.ReadFile("account.html")
+	if err!=nil {
+		logger.Fatalln("can't read account.html",err)
+	}
+	user.LoadPage(dashPage)
 	
 	cfg,err := config.Resolv(cfg_file)
 	if err!=nil {
@@ -1345,6 +1362,7 @@ func main() {
 	http.HandleFunc("/index.php", indexpage)
 	http.HandleFunc("/t/topic/", topicpage)
 	http.HandleFunc("/manager", managerHandler)
+	http.HandleFunc("/user/", userHandler)
 	
 	staticFS, _ := fs.Sub(staticFiles, "static")
 
@@ -1413,6 +1431,48 @@ func main() {
     logger.Fatalln(http.ListenAndServe(cfg.Listen, nil))
 }
 
+func userHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("seesion")
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	val,ok:=sessMap.Load(cookie.Value)
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	
+	uinfo:=val.(*user.UserInfo)
+	path1:=strings.TrimPrefix(r.URL.Path,"/user/")
+		
+	if path1=="dashboard" {
+		user.DashHandler(w,r,uinfo)
+		return
+	}
+	
+	if path1=="api/info" {
+		user.InfoHandler(w,r,uinfo)
+		return
+	}
+	
+	if path1=="api/passwd" {
+		user.PasswdHandler(w,r,uinfo)
+		return
+	}
+	
+	if path1=="api/domain" {
+		user.DomainHandler(w,r,uinfo)
+		return
+	}
+	
+	if path1=="api/verifyrequest" {
+		user.VerifyHandler(w,r,uinfo)
+		return
+	}
+	http.NotFound(w, r)
+}
+
 func managerHandler(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(403)
@@ -1434,7 +1494,12 @@ func managerHandler(w http.ResponseWriter, r *http.Request) {
             return
         }
 		
-		info:=val.(*UserInfo)
+		info:=val.(*user.UserInfo)
+		if !info.Is_admin {
+			w.WriteHeader(403)
+            w.Write([]byte("access deny"))
+            return
+		}
 		
 		state:=sql.GetByID("is_admin",info.ID)
 		if state!="admin"{
@@ -1898,7 +1963,7 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
             w.Write([]byte("access deny"))
             return
         }
-		info:=val.(*UserInfo)
+		info:=val.(*user.UserInfo)
 
         if r.Method == http.MethodPost {
 
@@ -2047,7 +2112,7 @@ func addNonce(nonce string) bool {
     return true
 }
 
-func sendNewPost(txt string,tag,typeid int,point_to,point_to_root string,uinfo *UserInfo) error {
+func sendNewPost(txt string,tag,typeid int,point_to,point_to_root string,uinfo *user.UserInfo) error {
 	var req ReplyRequest
 	req.PostPayload=txt
 	req.Tag = tag
