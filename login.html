@@ -237,6 +237,9 @@ if(data.status===1){
     setTimeout(() => {
         window.location.href = "/index.php";
     }, 1000);
+}else if(data.status===-1){
+messageBox.className = "message error";
+messageBox.innerText="用户已封禁";
 }else{
 messageBox.className = "message error";
 messageBox.innerText="登录失败";

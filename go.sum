@@ -20,8 +20,10 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/redis/go-redis/v9 v9.18.0 h1:pMkxYPkEbMPwRdenAzUNyFNrDgHx9U+DrBabWNfSRQs=
 github.com/redis/go-redis/v9 v9.18.0/go.mod h1:k3ufPphLU5YXwNTUcCRXGxUoF1fqxnhFQmscfkCoDA0=
-github.com/stalltrix/kep-demo v0.3.0 h1:dXLMgI2MkWQfKEWYtn2nqUCxrox//QyKvlNjlEV8pKo=
-github.com/stalltrix/kep-demo v0.3.0/go.mod h1:WAIc6l6uJLAyuNbRbF/wjlVjTYXoQT+pL0d8BzeXpIU=
+github.com/stalltrix/kep-cli v0.1.8 h1:v1tqMClz1FdC2R6nF1GygmKKE8F8l7qt+KqiDTQ/HMM=
+github.com/stalltrix/kep-cli v0.1.8/go.mod h1:WegC8oreHXU85yXtK+GeBPHvGVRxgcNYM9MRfKqz+9s=
+github.com/stalltrix/kep-demo v0.3.1 h1:JGl0aqdTcDA5sQ5JR7+lTK6rG0/Q8N4SqxtYTRXe+pM=
+github.com/stalltrix/kep-demo v0.3.1/go.mod h1:WAIc6l6uJLAyuNbRbF/wjlVjTYXoQT+pL0d8BzeXpIU=
 github.com/stalltrix/kepweb v0.2.8 h1:NqS5HCYVjGfNS79RvjBvKMdDHCC5nXfNIPmyF8WASJM=
 github.com/stalltrix/kepweb v0.2.8/go.mod h1:R7ab8MSMvXoy/5b7Tz79PXYGfh0mKA5v7uCzQaCOdP0=
 github.com/stretchr/testify v1.3.0 h1:TivCn/peBQ7UY8ooIcPgZFpTNSz0Q2U6UrFlUfqbe0Q=

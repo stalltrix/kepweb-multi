@@ -134,6 +134,7 @@ input,textarea{
 <li><a onclick="showPanel('changetag')">分类管理</a></li>
 <li><a onclick="showPanel('setperm')">权限管理</a></li>
 <li><a onclick="showPanel('setmeta')">头像管理</a></li>
+<li><a onclick="showPanel('multiuser')">用户管理</a></li>
 </ul>
 
 </div>
@@ -208,7 +209,7 @@ input,textarea{
 <div class="card">
 
 <h3>发送私信（未实现）</h3>
-
+<input id="NerID" placeholder="邻居ID">
 <textarea rows="5" placeholder="输入消息"></textarea>
 
 <button class="btn">发送</button> 
@@ -281,6 +282,23 @@ input,textarea{
 
 <button class="btn" onclick="metaOff(1)">隐藏</button>
 <button class="btn" onclick="metaOff(0)">恢复</button>
+
+</div>
+
+</div>
+<div id="multiuser" class="panel" style="display:none">
+
+<div class="card">
+
+<h3>用户管理</h3>
+
+<input id="userID" placeholder="用户名">
+<input id="userPass" placeholder="新密码（可选）">
+
+<button class="btn" onclick="userManager(1)">添加新用户</button>
+<button class="btn" onclick="userManager(2)">强制重置密码</button>
+<button class="btn" onclick="userManager(3)">封禁</button>
+<button class="btn" onclick="userManager(4)">解封</button>
 
 </div>
 
@@ -521,6 +539,22 @@ return
 }
 
 api("metaoff",id,String(set)).then(res=>{
+alert(res.state)
+})
+
+}
+
+function userManager(set){
+
+const id=document.getElementById("userID").value.trim()
+const pass=document.getElementById("userPass").value.trim()
+
+if(!id){
+alert("请输入用户名")
+return
+}
+
+api("multiuser",id,pass,set).then(res=>{
 alert(res.state)
 })
 

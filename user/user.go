@@ -52,6 +52,8 @@ var (
 	logInfo logger.Log_TYPE
 )
 
+const maxSize = 1 << 12 //4k
+
 func startLimiterCleaner() {
         ticker := time.NewTicker(10 * time.Minute)
         defer ticker.Stop()
@@ -225,6 +227,8 @@ func PasswdHandler(w http.ResponseWriter, r *http.Request,uinfo *UserInfo) {
         New  string `json:"new"`
         CSRF string `json:"csrf"`
     }
+	
+	r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 
     err := json.NewDecoder(r.Body).Decode(&req)
     if err != nil {
@@ -282,6 +286,8 @@ func DomainHandler(w http.ResponseWriter, r *http.Request,uinfo *UserInfo) {
         Domain string `json:"domain"`
         CSRF  string `json:"csrf"`
     }
+	
+	r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 
     err := json.NewDecoder(r.Body).Decode(&req)
     if err != nil {
@@ -358,6 +364,8 @@ func VerifyHandler(w http.ResponseWriter, r *http.Request,uinfo *UserInfo) {
     var req struct {
         CSRF  string `json:"csrf"`
     }
+	
+	r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 
     err := json.NewDecoder(r.Body).Decode(&req)
     if err != nil {

@@ -11,7 +11,8 @@ type Neighbor struct {
 }
 
 type Config struct {
-    SQLip    string     `json:"sql_ip"`
+    Keyfile    string     `json:"keyfile"`
+	SQLip    string     `json:"sql_ip"`
     SQLpass  string     `json:"sql_auth"`
 	ApiToken     string     `json:"api_token"`
 	Apiport     string     `json:"api_port"`
@@ -19,6 +20,7 @@ type Config struct {
 	Metaon    bool      `json:"meta_on"`
 	Listen    string     `json:"listen"`
 	Ntp    string     `json:"ntp"`
+	Socks5    string     `json:"socks5"`
 	Dbfile string     `json:"db_file"`
 	DbAddr string     `json:"db_addr"`
 	DbPass string     `json:"db_pass"`

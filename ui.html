@@ -432,6 +432,82 @@
   color:#e11d48;
 }
 .post-own { font-size: 0.76rem; color: #b3b3b3; }
+
+.user-menu{
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.user-avatar{
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    object-fit: cover;
+}
+
+.user-dropdown{
+    position: absolute;
+    top: 48px;
+    right: 0;
+    width: 240px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    padding: 10px 0;
+    display: none;
+    z-index: 999;
+}
+
+.user-dropdown.show{
+    display: block;
+}
+
+.user-info{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dropdown-avatar{
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+#dropdown-name{
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#dropdown-email{
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.dropdown-item{
+    display: block;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover{
+    background: var(--hover-bg);
+}
+
+.logout-item{
+    color: #e5484d;
+}
+
     </style>
 	<link rel="stylesheet" href="/static/markdown.min.css">
 </head>
@@ -495,19 +571,33 @@ fill="none" stroke="currentColor" stroke-width="2">
         登录
     </button>
 
+    <div class="user-menu" id="userMenu" style="display:none;">
     <img id="user-avatar"
          src="#"
-         class="user-avatar"
-         style="display:none">
-	
-	<div id="logoffbtn" class="icon logoff-link" style="display:none">
-<svg id="logoutbtn" width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none">
+         class="user-avatar">
+
+    <div class="user-dropdown" id="userDropdown">
+        <div class="user-info">
+            <img id="dropdown-avatar" src="#" class="dropdown-avatar">
+            <div>
+                <div id="dropdown-name">用户名</div>
+                <div id="dropdown-domain">stalltrix.com</div>
+            </div>
+        </div>
+
+        <a href="/user/dashboard" class="dropdown-item">
+            个人中心
+        </a>
+
+        <div class="dropdown-item logout-item" id="logoutbtn">
+            <svg style="display:none;" width="24" height="24" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none">
   <rect x="10" y="12" width="24" height="24" rx="4" stroke="#333" stroke-width="3"/>
   <path d="M26 24H46" stroke="#333" stroke-width="3" stroke-linecap="round"/>
   <path d="M44 16L52 24L44 32" stroke="#333" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-	</div>
-
+</svg>退出登录
+        </div>
+    </div>
+</div>
 </div>
         </div>
     </header>
@@ -911,8 +1001,8 @@ if(data.status===1){
     `https://avatar.stalltrix.com/avatar/${encodeURIComponent(data.user)}.svg`;
 
     document.getElementById("user-avatar").src = avatar;
+	document.getElementById("dropdown-domain").innerText=data.user;
 	document.getElementById("newtopics").style.display="flex";
-	document.getElementById("logoffbtn").style.display="flex";
 
     this.setLoggedIn();
 
@@ -936,8 +1026,7 @@ setLoggedIn(){
 
 document.getElementById("login-btn").style.display="none";
 
-document.getElementById("user-avatar").style.display="block";
-document.getElementById("logoffbtn").style.display="block";
+document.getElementById("userMenu").style.display="flex";
 },
 
 async checkLogin(){
@@ -956,6 +1045,7 @@ async checkLogin(){
             `https://avatar.stalltrix.com/avatar/${encodeURIComponent(data.user)}.svg`;
 
             document.getElementById("user-avatar").src = avatar;
+			document.getElementById("dropdown-domain").innerText=data.user;
 			document.getElementById("newtopics").style.display="flex";
 
             this.setLoggedIn();
@@ -1507,6 +1597,19 @@ logoutBtn.onclick = async() => {
       alert("网络错误");
   }
 };
+const dropdown = document.getElementById('userDropdown');
+document.getElementById('user-avatar').addEventListener('click', function (e) {
+    e.stopPropagation();
+    dropdown.classList.toggle('show');
+});
+
+document.addEventListener('click', function () {
+    dropdown.classList.remove('show');
+});
+
+dropdown.addEventListener('click', function (e) {
+    e.stopPropagation();
+});
 </script>
 
 </body>

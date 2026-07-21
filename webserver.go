@@ -40,6 +40,7 @@ import (
 	"kepweb-multi/sql"
 	"encoding/base64"
 	"kepweb-multi/user"
+	"kepweb-multi/useradmin"
 )
 
 type PostIndexView struct {
@@ -244,6 +245,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(405)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1 << 16)
 		var req ReplyRequest
         if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
             w.WriteHeader(405)
@@ -1044,7 +1046,12 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		info:=val.(*user.UserInfo)
 		
-		w.Write([]byte(`{"status":1,"user":"`+info.Name+`","nonce":"`+post_prefix+"_"+info.Nonce+`"}`))
+		metaData,err:=meta.Meta_get(info.Name)
+		if err != nil {
+			metaData="https://avatar.stalltrix.com/avatar"
+		}
+		
+		w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"`+metaData+`","nonce":"`+post_prefix+"_"+info.Nonce+`"}`))
 }
 func logoffHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1064,6 +1071,7 @@ func logoffHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
+		r.Body = http.MaxBytesReader(w, r.Body, 1 << 10)
 		var req ReplyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.Write([]byte(`{"status":0}`))
@@ -1095,6 +1103,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	r.Body = http.MaxBytesReader(w, r.Body, 1 << 10)
 	var req LoginType
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         w.Write([]byte(`{"status":0}`))
@@ -1199,7 +1208,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	
 	is_banned:=sql.GetByID("is_banned",id)
 	if is_banned=="1"{
-		w.Write([]byte(`{"status":0}`))
+		w.Write([]byte(`{"status":-1}`))
         return
 	}
 	
@@ -1309,6 +1318,9 @@ func main() {
 		time.Sleep(time.Second*12)
 	}
 	
+	if cfg.Keyfile=="" {
+		logger.Fatal("Err: keyfile is null")
+	}
 	if len(cfg.ApiToken) < 8 {
 		logger.Fatal("Err: token is null")
 	}
@@ -1334,11 +1346,16 @@ func main() {
 		nextroute[i].Auth=cfg.Neighbors[i].Token
 	}
 	
-	send.Send_Init(nextroute,"")
+	send.Send_Init(nextroute,cfg.Socks5,cfg.SkipSSLchk)
 	
 	if cfg.Ntp != "" {
 		ntp.Ntp_Init(cfg.Ntp)
 		logWarn.Println("start ntp client:",cfg.Ntp)
+	}
+	
+	err=useradmin.SetKeyFile(cfg.Keyfile)
+	if err!=nil{
+		logWarn.Println("Warn: set keyfile fail:",err)
 	}
 	
 	err=sql.Conn(cfg.SQLip,cfg.SQLpass)
@@ -1363,6 +1380,7 @@ func main() {
 	http.HandleFunc("/t/topic/", topicpage)
 	http.HandleFunc("/manager", managerHandler)
 	http.HandleFunc("/user/", userHandler)
+	http.HandleFunc("/about", aboutHandler)
 	
 	staticFS, _ := fs.Sub(staticFiles, "static")
 
@@ -1431,6 +1449,10 @@ func main() {
     logger.Fatalln(http.ListenAndServe(cfg.Listen, nil))
 }
 
+func aboutHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("管理员未设置about页面"))
+}
+
 func userHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("seesion")
 	if err != nil {
@@ -1446,6 +1468,11 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 	uinfo:=val.(*user.UserInfo)
 	path1:=strings.TrimPrefix(r.URL.Path,"/user/")
 		
+	if path1=="" {
+		http.Redirect(w, r, "/user/dashboard", http.StatusFound)
+		return
+	}
+	
 	if path1=="dashboard" {
 		user.DashHandler(w,r,uinfo)
 		return
@@ -1615,8 +1642,27 @@ case "ban":{
 			io.WriteString(w, formatError(err))
 		}
 		logWarn.Println("[management log] ban domain:"+domain+" reason:"+Ner_url)
+	}else if strings.HasSuffix(act, "user:") {
+		user:=strings.TrimPrefix(act,"user:")
+		id:=sql.Search("name",user)
+		if id<0 {
+			io.WriteString(w,`{"state":"user not found"}`)
+			return
+		}
+		is_banned:=sql.GetByID("is_banned",id)
+		if is_banned=="1"{
+			io.WriteString(w,`{"state":"`+user+` already banned"}`)
+			return
+		}
+		err=sql.Set("is_banned","1",id)
+		if err==nil {
+			io.WriteString(w,`{"state":"OK"}`)
+		} else {
+			io.WriteString(w, formatError(err))
+		}
+		logWarn.Println("[management log] ban user:"+user+" reason:"+Ner_url)
 	}else{
-		io.WriteString(w,`{"state":"req err, need me:domain"}`)
+		io.WriteString(w,`{"state":"req err, need me:domain or user:username"}`)
 	}
 	return
 	}
@@ -1656,8 +1702,27 @@ case "unban":{
 		} else {
 			io.WriteString(w, formatError(err))
 		}
+	}else if strings.HasSuffix(act, "user:") {
+		user:=strings.TrimPrefix(act,"user:")
+		id:=sql.Search("name",user)
+		if id<0 {
+			io.WriteString(w,`{"state":"user not found"}`)
+			return
+		}
+		is_banned:=sql.GetByID("is_banned",id)
+		if is_banned!="1"{
+			io.WriteString(w,`{"state":"`+user+` is not ban"}`)
+			return
+		}
+		err=sql.Set("is_banned","",id)
+		
+		if err==nil {
+			io.WriteString(w,`{"state":"OK"}`)
+		} else {
+			io.WriteString(w, formatError(err))
+		}
 	}else{
-		io.WriteString(w,`{"state":"req err, need me:domain"}`)
+		io.WriteString(w,`{"state":"req err, need me:domain or user:username"}`)
 	}
 	return
 	}
@@ -1679,6 +1744,44 @@ case "pmsg":{
 	//私信
 	//TODO:
 	io.WriteString(w,`{"state":"TODO..."}`)
+}
+case "multiuser":{
+	switch user.RPM {
+	case 1:
+		err=useradmin.NewUser(act,Ner_url)
+		if err!=nil {
+			if err==sql.NotFoundErr {io.WriteString(w,`{"state":"user not found"}`);return;}
+			io.WriteString(w, formatError(err))
+			return
+		}
+		io.WriteString(w,`{"state":"multi-user: adduser OK"}`)
+	case 2:
+		err=useradmin.ForceResetPasswd(act,Ner_url)
+		if err!=nil {
+			if err==sql.NotFoundErr {io.WriteString(w,`{"state":"user not found"}`);return;}
+			io.WriteString(w, formatError(err))
+			return
+		}
+		io.WriteString(w,`{"state":"multi-user: reset password OK"}`)
+	case 3:
+		err=useradmin.BanUser(act)
+		if err!=nil {
+			if err==sql.NotFoundErr {io.WriteString(w,`{"state":"user not found"}`);return;}
+			io.WriteString(w, formatError(err))
+			return
+		}
+		io.WriteString(w,`{"state":"multi-user: ban user OK"}`)
+	case 4:
+		err=useradmin.UnBanUser(act)
+		if err!=nil {
+			if err==sql.NotFoundErr {io.WriteString(w,`{"state":"user not found"}`);return;}
+			io.WriteString(w, formatError(err))
+			return
+		}
+		io.WriteString(w,`{"state":"multi-user: unban user OK"}`)
+	default:
+		io.WriteString(w,`{"state":"multi-user: method not found"}`)
+	}
 }
 case "metaoff":{
 	_,ok=meta_off[act]
@@ -2047,6 +2150,11 @@ func indexpage(w http.ResponseWriter, r *http.Request) {
             return
 
         } else if manager == "banuser" {
+			if !info.Is_admin {
+				w.WriteHeader(403)
+				w.Write([]byte("access deny"))
+				return
+			}
 			state:=sql.GetByID("is_admin",info.ID)
 			if state!="admin"{
 				w.WriteHeader(403)
