@@ -43,7 +43,7 @@ INSERT INTO users (
 
 添加user123为admin，密码为12345678
 
-'a2V5MTIz...'为key的base64，使用`openssl base64 -in key.pub -out key.txt`依次获取4个key填上去
+'a2V5MTIz...'为key的base64，使用`kep-cli gen`后打开genkey.log获取3个key的base64，以及打开pkey.priv获取中间的私钥base64填上去
 
 password需要先获取sha256
 如'12345678'的sha256为

@@ -13,6 +13,7 @@ import (
 	"github.com/stalltrix/kep-demo/send"
 	"github.com/stalltrix/kep-demo/ntp"
 	"github.com/stalltrix/kep-demo/limit"
+	"github.com/stalltrix/kep-demo/verify"
 	"crypto/rand"
 	"encoding/hex"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"github.com/stalltrix/kepweb/postcodec"
 	"github.com/stalltrix/kepweb/mapvec"
 	"github.com/stalltrix/kepweb/randlist"
+	"github.com/stalltrix/kepweb/captcha"
 	"net/netip"
 	"sync/atomic"
 	"kepweb-multi/sql"
@@ -67,6 +69,7 @@ type ReplyRequest struct {
 type LoginType struct {
 	User    string    `json:"user"`
     Token   string    `json:"token"`
+	Verify  string    `json:"captcha"`
 }
 
 type indexCache struct {
@@ -91,7 +94,9 @@ var (
 	token_UrlApi string
 	token_urlPort string
 	sortList [65536]string
+	newList [256]string
 	sortIdx uint16
+	newIdx byte
 	二维指针 *mapvec.DataHandle
 	limiterMap sync.Map
 	neighborTokenMap sync.Map
@@ -116,6 +121,7 @@ var (
 	trustFor netip.Addr
 	skipSSLchk bool
 	loginPage []byte
+	captchaon bool
 	pageViews sync.Map
 )
 
@@ -349,7 +355,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
         return
 	}
 	tag:=-1
-	if tagID != "all" && tagID != "rand" {
+	if tagID != "all" && tagID != "rand" && tagID != "new" {
 		tag,err=strconv.Atoi(tagID)
 		if err !=nil {
 			http.Error(w, "invalid page", http.StatusBadRequest)
@@ -389,7 +395,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	var posts []*postcodec.Post
-	if tagID != "rand" {
+	if tagID != "rand" && tagID != "new" {
 	diff :=make(map[string]bool)
 	i:=sortIdx
 	if top_post.Hex != "" {diff[top_post.Hex]=false;}
@@ -427,6 +433,26 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	} else if tagID == "new" {
+		diff :=make(map[string]bool)
+		i:=newIdx
+		if top_post.Hex != "" {diff[top_post.Hex]=false;}
+		for j:=0;j<256;j++{
+			i--
+			hex:=newList[i]
+			if hex == "" {
+				break
+			}
+			_,ok:=diff[hex]
+			if ok {
+				continue
+			}
+			post, ok := dbStore.Load(hex)
+			if ok {
+				diff[hex]=false
+				posts = append(posts, post)
+			}
+		}
 	} else {
 		if randlist.MustRenew() {
 			randlist.Renew(&sortList,sortIdx)
@@ -635,12 +661,19 @@ func async_send(payload ReplyRequest,uinfo *user.UserInfo) (string,error) {
 
     msg := buf.Bytes()
 	hashHex := hex.EncodeToString(tHash)
-	go func(){
+	
+	_,err=verify.ParseAndVerify(msg)
+	if err != nil {
+		return hashHex,err
+	}
+	
+	//go func(){
 	err = send.Nextmsg(msg,"",skipSSLchk)
 	if err != nil {
-		logErr.Println("send msg err:",err)
+		//logErr.Println("send msg err:",err)
+		return hashHex,err
 	}
-	}()
+	//}()
 	return hashHex,nil
 }
 
@@ -811,6 +844,8 @@ for _,sub := range subs {
 	二维指针.Store(tag,newV)
 	sortList[sortIdx]=tag
 	sortIdx++
+	newList[newIdx]=tag
+	newIdx++
 		}
 }
 
@@ -931,8 +966,28 @@ func initData() {
 		if sortList[i]==""||sortList[j]==""{
 			return false
 		}
-		return getpostTime(sortList[i]) < getpostTime(sortList[j])
+		return getLastPost(sortList[i]) < getLastPost(sortList[j])
 	})
+	sort.Slice(newList[:newIdx], func(i, j int) bool {
+		if newList[i]==""||newList[j]==""{
+			return false
+		}
+		return getpostTime(newList[i]) < getpostTime(newList[j])
+	})
+}
+
+func getLastPost(hex string) int64 {
+	if hex == "" {
+		return 0
+	}
+	post, ok := dbStore.Load(hex)
+	if ok {
+		if len(post.Replies)==0{
+			return 0
+		}
+		return post.Replies[len(post.Replies)-1].FirstTime
+	}
+	return 0
 }
 
 func getpostTime(hex string) int64 {
@@ -1115,6 +1170,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         return
 	}
 	
+	if len(req.User)>64||len(req.User)<3 {
+		w.Write([]byte(`{"status":0}`))
+        return
+	}
+	
 	real_ip := r.RemoteAddr
 	if idx := strings.LastIndex(real_ip, ":"); idx != -1 {
 		real_ip = real_ip[:idx]
@@ -1170,6 +1230,20 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			user_ip = real_ip
+		}
+	}
+	
+	if captchaon {
+		if req.Verify==""{
+			logDebug.Println("login captcha is null")
+			w.Write([]byte(`{"status":0}`))
+			return
+		}
+		err=captcha.Verify_f(req.Verify)
+		if err !=nil {
+			logDebug.Println("login captcha fail",err)
+			w.Write([]byte(`{"status":0}`))
+			return
 		}
 	}
 	
@@ -1260,27 +1334,124 @@ func main() {
 	if argc <=1 {
 		logger.Print("usage:")
 		logger.Print("\twebserver [config.json] [logfile]")
+		logger.Print("\twebserver -cli command")
 		return
 	}
 	cfg_file:=os.Args[1]
-	var err error
 	
-	fileNewPost,err=os.ReadFile("markdown.html")
+	if cfg_file=="-v" {
+		logger.Print("webserver-multi: v0.2.0")
+		return
+	}
+	
+	if cfg_file=="-cli" {
+		if argc <=4 {
+			logger.Print("usage:")
+			logger.Print("webserver -cli [command]")
+			logger.Print("\t-cli [config.json] adduser [username]")
+			logger.Print("\t-cli [config.json] banuser [username]")
+			logger.Print("\t-cli [config.json] setadmin [username]")
+			logger.Print("\t-cli [config.json] deladmin [username]")
+			logger.Print("\t-cli [config.json] resetpass [username]")
+			return
+		}
+		cfg,err := config.Resolv(os.Args[2])
+		if err!=nil {
+			logger.Fatalln("can't read config.json",err)
+		}
+		cmd:=os.Args[3]
+		user:=os.Args[4]
+		err=useradmin.SetKeyFile(cfg.Keyfile)
+		if err!=nil{
+			logger.Fatalln("Warn: set keyfile fail:",err)
+		}
+		err=sql.Conn(cfg.SQLip,cfg.SQLpass)
+		if err!=nil{
+			logger.Fatalln("Err: connect sql database:",err)
+		}
+		if user==""{
+			logger.Print("username is null")
+			return
+		}
+		if cmd=="adduser" {
+			pass,err:=randSess(8)
+			if err!=nil{
+				logger.Fatalln(err)
+			}
+			err=useradmin.NewUser(user,pass)
+			if err!=nil{
+				logger.Fatalln("add user fail:",err)
+			}
+			logger.Print("add user success, username="+user+" , pass="+pass)
+		} else if cmd=="resetpass" {
+			pass,err:=randSess(8)
+			if err!=nil{
+				logger.Fatalln(err)
+			}
+			err=useradmin.ForceResetPasswd(user,pass)
+			if err!=nil{
+				logger.Fatalln("reset password fail:",err)
+			}
+			logger.Print("reset password success, username="+user+" , pass="+pass)
+		} else if cmd=="banuser" {
+			err=useradmin.BanUser(user)
+			if err!=nil{
+				logger.Fatalln("ban user fail:",err)
+			}
+			logger.Print("ban user success, username="+user+" is banned")
+		} else if cmd=="setadmin" {
+			id:=sql.Search("name",user)
+			if id<0 {
+				logger.Fatalln(sql.NotFoundErr)
+			}
+			err:=sql.Set("is_admin","admin",id)
+			if err!=nil {
+				logger.Fatalln("set admin fail:",err)
+			}
+			logger.Print("set admin success, username="+user+" is admin now")
+		} else if cmd=="deladmin" {
+			id:=sql.Search("name",user)
+			if id<0 {
+				logger.Fatalln(sql.NotFoundErr)
+			}
+			err:=sql.Set("is_admin","",id)
+			if err!=nil {
+				logger.Fatalln("del admin fail:",err)
+			}
+			logger.Print("del admin success, username="+user+" no longer admin")
+		}
+		return
+	}
+	
+	var err error
+	self:=""
+	exePath, err := os.Executable()
+    if err == nil {
+		self = filepath.Dir(exePath)
+		kepdb.Init_path(self)
+		selfdir=filepath.Join(self, "kep-data")
+    }else{
+		selfdir="kep-data"
+		logger.Print("find self dir err: "+err.Error())
+		time.Sleep(time.Second*12)
+	}
+	
+	fileNewPost,err=os.ReadFile(filepath.Join(self, "markdown.html"))
 	if err!=nil {
 		logger.Fatalln("can't read markdown.html",err)
 	}
 	
-	manager_tmpl,err=template.ParseFiles("manager.html")
+	manager_tmpl,err=template.ParseFiles(filepath.Join(self, "manager.html"))
 	if err!=nil {
 		logger.Fatalln("can't read manager.html",err)
 	}
 		
-	loginPage,err=os.ReadFile("login.html")
+	loginPage,err=os.ReadFile(filepath.Join(self, "login.html"))
 	if err!=nil {
 		logger.Fatalln("can't read login.html",err)
 	}
 	
-	dashPage,err:=os.ReadFile("account.html")
+	dashPage,err:=os.ReadFile(filepath.Join(self, "account.html"))
 	if err!=nil {
 		logger.Fatalln("can't read account.html",err)
 	}
@@ -1301,21 +1472,9 @@ func main() {
     logWarn.SetLevel("warn")
     logErr.SetLevel("err")
 	
-	fileIndex,err=os.ReadFile("ui.html")
+	fileIndex,err=os.ReadFile(filepath.Join(self, "ui.html"))
 	if err!=nil {
 		logger.Fatalln("can't read ui.html",err)
-	}
-	
-	self:=""
-	exePath, err := os.Executable()
-    if err == nil {
-		self = filepath.Dir(exePath)
-		kepdb.Init_path(self)
-		selfdir=filepath.Join(self, "kep-data")
-    }else{
-		selfdir="kep-data"
-		logger.Print("find self dir err: "+err.Error())
-		time.Sleep(time.Second*12)
 	}
 	
 	if cfg.Keyfile=="" {
@@ -1363,7 +1522,7 @@ func main() {
 		logger.Fatalln("Err: connect sql database:",err)
 	}
 	
-	err=loadPageView("pageview.json")
+	err=loadPageView(filepath.Join(self, "pageview.json"))
 	if err!=nil{
 		logWarn.Println("WARN: read pageview err:",err)
 	}
@@ -1415,6 +1574,14 @@ func main() {
 			return
 		}
 	}
+	if cfg.Captcha.ServerAddr != "" && cfg.Captcha.SecretKey!="" {
+		if !strings.HasPrefix(cfg.Captcha.ServerAddr,"http"){
+			logger.Fatal("ERR: set captcha addr err: url format err, "+cfg.Captcha.ServerAddr)
+		}
+		logWarn.Println("init: set captcha on, addr:",cfg.Captcha.ServerAddr)
+		captchaon=true
+		captcha.Set(cfg.Captcha.ServerAddr,cfg.Captcha.SecretKey,cfg.Captcha.UA)
+	}
 	patch_file=cfg.Permfile
 	if patch_file=="" {
 		patch_file=filepath.Join(self, "perm.ini")
@@ -1444,8 +1611,9 @@ func main() {
 	}
 	go auto_renew_csrf();
 	go meta.NewTTLMap()
-	go autoSave()
+	go autoSave(self)
 	go startLimiterCleaner()
+	go verify.NewTTLMap()
     logger.Fatalln(http.ListenAndServe(cfg.Listen, nil))
 }
 
@@ -2276,13 +2444,16 @@ if req.Tag == 65534 {
 }
 	sortList[sortIdx]=hash
 	sortIdx++
+	newList[newIdx]=hash
+	newIdx++
 	return nil
 }
 
-func autoSave(){
+func autoSave(self string){
+	file1:=filepath.Join(self, "pageview.json")
 for{
 	time.Sleep(time.Second*600)
-	err := savePageView("pageview.json")
+	err := savePageView(file1)
 	if err!=nil{
 		logInfo.Println("err: save view task:",err)
 	}

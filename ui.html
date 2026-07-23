@@ -507,7 +507,57 @@
 .logout-item{
     color: #e5484d;
 }
+.msg-box{
+    position:fixed;
+    left:0;
+    top:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.35);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;
+}
 
+.msg-content{
+    background:white;
+    padding:25px 30px;
+    border-radius:6px;
+    min-width:260px;
+    text-align:center;
+    box-shadow:var(--shadow);
+}
+
+.msg-content span{
+    display:block;
+    margin-top:10px;
+    margin-bottom:15px;
+}
+
+.msg-content button{
+    background:var(--primary-color);
+    border:none;
+    color:white;
+    padding:6px 14px;
+    border-radius:4px;
+    cursor:pointer;
+}
+
+.spinner{
+    width:32px;
+    height:32px;
+    border:4px solid #ddd;
+    border-top:4px solid var(--primary-color);
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+    margin:auto;
+}
+
+@keyframes spin{
+    from{transform:rotate(0deg);}
+    to{transform:rotate(360deg);}
+}
     </style>
 	<link rel="stylesheet" href="/static/markdown.min.css">
 </head>
@@ -607,7 +657,7 @@ fill="none" stroke="currentColor" stroke-width="2">
             <a href="#">标签 ▾</a>
             <a id="thenew" href="#" class="active" onclick="app.changeTag(-1)">最新</a>
             <a id="thernd" href="#" onclick="app.changeTag(-2)">热门</a>
-            <a href="#">未读</a>
+            <a id="thepst" href="#" onclick="app.changeTag(-3)">未读</a>
         </nav>
         <div class="main-layout">
            <main class="topic-list">
@@ -714,7 +764,7 @@ fill="none" stroke="currentColor" stroke-width="2">
 <textarea id="reply-text" placeholder="写下你的回复..."></textarea>
 
 <div class="reply-actions">
-<button onclick="app.submitReply()">发送回复</button>
+<button id="submit-btn" onclick="app.submitReply()">发送回复</button>
 </div>
 
 </div>
@@ -852,6 +902,13 @@ style="font-size:13px;color:#888;margin-top:10px"></div>
 </div>
 
 </div>
+<div id="msgBox" class="msg-box">
+<div class="msg-content">
+<div id="spinner" class="spinner"></div>
+<span id="msgText">正在提交...</span>
+<button id="msgBtn" onclick="closeMsg()" style="display:none">确定</button>
+</div>
+</div>
 <script src="/static/marked.min.js"></script>
 <script src="/static/markdown.js"></script>
 <script>
@@ -930,6 +987,14 @@ async init(){
 
     }
 
+},
+
+enableReply() {
+    document.getElementById('submit-btn').disabled = false;
+},
+	
+disableReply() {
+    document.getElementById('submit-btn').disabled = true;
 },
 
 showLoginAlert(){
@@ -1058,7 +1123,7 @@ async checkLogin(){
 
 goHome(){
 		let pushstate='';
-		if (this.currentTag&&this.currentTag!=="all"&&this.currentTag!=="rand"){
+		if (this.currentTag&&this.currentTag!=="all"&&this.currentTag!=="rand"&&this.currentTag!=="new"){
 			pushstate=`?t=${this.currentTag}`;
 		}
 		if (pushstate!==''){
@@ -1346,9 +1411,14 @@ async submitReply(){
     const payload = document.getElementById("reply-text").value;
 
 	if (!payload || payload.length<3) {
-        alert("回复不能为空");
+        showMsg("回复不能为空");
         return;
     }
+	
+	this.disableReply();
+	showLoading();
+	
+	try {
 
     const res = await fetch(`${this.apiBase}/view/${this.currentTag}/${this.currentHex}`,{
 
@@ -1372,29 +1442,40 @@ async submitReply(){
     const data = await res.json();
 
     if (data.status==="reply rate limit exceeded"){
-        alert("每半天最多回复100个帖子");
+        this.enableReply();
+		showMsg("每半天最多回复100个帖子");
 		return
     }
 	
     if (data.status==="post format err"){
-        alert("格式错误");
+        this.enableReply();
+		showMsg("格式错误");
         return;
     }
 
     if (data.status==="duplicate"){
-        alert("重复发送");
+        this.enableReply();
+		showMsg("重复发送");
         return;
     }
 	
 	if (data.status==="send msg err"){
-        alert("发送失败，key配置错误");
+        this.enableReply();
+		showMsg("发送失败，key配置错误");
         return;
 	}
 
     document.getElementById("reply-text").value="";
+	showMsg('',true);
+	this.enableReply();
 
     this.loadPost(this.currentHex);
-
+	
+	} catch (err) {
+        this.enableReply();
+		showMsg('回复失败');
+        console.error(err);
+    }
 },
 
 generateNonce(){
@@ -1406,11 +1487,18 @@ if (tag<0){
 if (tag==-1){
 document.getElementById("thenew").className="active";
 document.getElementById("thernd").className="";
+document.getElementById("thepst").className="";
 this.currentTag = "all";
 }else if (tag==-2){
 document.getElementById("thenew").className="";
+document.getElementById("thepst").className="";
 document.getElementById("thernd").className="active";
 this.currentTag = "rand";
+}else if (tag==-3){
+document.getElementById("thenew").className="";
+document.getElementById("thernd").className="";
+document.getElementById("thepst").className="active";
+this.currentTag = "new";
 }
 history.pushState({}, "", `/index.php`);
 }else{
@@ -1610,6 +1698,26 @@ document.addEventListener('click', function () {
 dropdown.addEventListener('click', function (e) {
     e.stopPropagation();
 });
+function showLoading(){
+document.getElementById("msgBox").style.display="flex";
+document.getElementById("spinner").style.display="block";
+document.getElementById("msgText").innerText="正在提交，请稍候...";
+document.getElementById("msgBtn").style.display="none";
+}
+function closeMsg(){
+document.getElementById("msgBox").style.display="none";
+}
+function showMsg(text,success=false){
+document.getElementById("spinner").style.display="none";
+if (!success){
+document.getElementById("msgText").innerText=text;
+document.getElementById("msgBtn").style.display="inline-block";
+document.getElementById("msgBox").style.display="flex";
+}else{
+document.getElementById("msgText").innerText='成功';
+closeMsg();
+}
+}
 </script>
 
 </body>

@@ -30,6 +30,47 @@ kep webUI-multi程序，允许多用户共用一个节点。
 
 ---
 
+<br>
+
+## 安装教程
+
+#### 注意，kepweb-multi 从v0.2.0版本开始，依赖mysql兼容数据库（例如mariadb-10.x）
+
+### 1.安装edge主程序
+
+安装[kep-edge](https://github.com/stalltrix/kep-demo)项目，在相同目录安装并启动程序。配置api_token以及local_token，后续kepweb-multi程序使用
+
+### 2.安装mysql兼容数据库
+
+下载解压安装mysql兼容数据库，添加一个表‘userkepdb'，创建管理员账户，参考[sql.cmd](sql.cmd)。创建管理员也可使用`kepweb-multi -cli`快捷命令
+
+### 3.安装kepweb-multi程序
+
+参考[config.json](config.json)进行配置文件。启动kepweb-multi程序
+
+config.json最小配置
+
+```json
+{
+	"sql_ip": "127.0.0.1:3306",
+	"sql_auth": "root:123456",
+	"keyfile": "keydata",
+	"ntp": "time.cloudflare.com",
+	"api_token": "[your kep-edge api_token]",
+	"listen": "127.0.0.1:3000",
+	"neighbors": [
+		{
+			"url": "http://127.0.0.1:8080",
+			"token": "[your kep-edge local_token]"
+		}
+	]
+}
+```
+
+---
+
+<br>
+
 ## 提示:
 
 推荐使用单用户设计主题[kepweb](https://github.com/stalltrix/kepweb)项目。
