@@ -1103,7 +1103,25 @@ func meHandler(w http.ResponseWriter, r *http.Request) {
 		
 		metaData,err:=meta.Meta_get(info.Name)
 		if err != nil {
-			metaData="https://avatar.stalltrix.com/avatar"
+			metaData="https://avatar.stalltrix.com/avatar/"+url.QueryEscape(info.Name)+".svg"
+		} else {
+			var ImgData struct {
+				Name string `json:"name"`
+				Img  string `json:"img"`
+			}
+			err = json.Unmarshal([]byte(metaData), &ImgData)
+			if err != nil {
+				metaData="https://avatar.stalltrix.com/avatar/"+url.QueryEscape(info.Name)+".svg"
+			} else {
+				if ImgData.Img==""{
+					if ImgData.Name==""{
+						ImgData.Name=info.Name
+					}
+					metaData="https://avatar.stalltrix.com/avatar/"+url.QueryEscape(ImgData.Name)+".svg"
+				} else {
+					metaData=ImgData.Img
+				}
+			}
 		}
 		
 		w.Write([]byte(`{"status":1,"user":"`+info.Name+`","img":"`+metaData+`","nonce":"`+post_prefix+"_"+info.Nonce+`"}`))

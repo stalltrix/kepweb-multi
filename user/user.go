@@ -342,6 +342,7 @@ func DomainHandler(w http.ResponseWriter, r *http.Request,uinfo *UserInfo) {
 		return
 	}
 	nowUser.Domain = req.Domain
+	uinfo.Name = req.Domain
 
     writeJSON(w, http.StatusOK, "domain updated")
 }

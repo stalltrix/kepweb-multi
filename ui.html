@@ -1066,6 +1066,7 @@ if(data.status===1){
     `https://avatar.stalltrix.com/avatar/${encodeURIComponent(data.user)}.svg`;
 
     document.getElementById("user-avatar").src = avatar;
+	document.getElementById("dropdown-avatar").src = avatar;
 	document.getElementById("dropdown-domain").innerText=data.user;
 	document.getElementById("newtopics").style.display="flex";
 
@@ -1110,6 +1111,7 @@ async checkLogin(){
             `https://avatar.stalltrix.com/avatar/${encodeURIComponent(data.user)}.svg`;
 
             document.getElementById("user-avatar").src = avatar;
+			document.getElementById("dropdown-avatar").src = avatar;
 			document.getElementById("dropdown-domain").innerText=data.user;
 			document.getElementById("newtopics").style.display="flex";
 
