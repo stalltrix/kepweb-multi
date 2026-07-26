@@ -960,6 +960,7 @@ async init(){
         document.getElementById("detail-view").style.display="block";
 
         await this.loadPost(hex);
+		this.checkLogin();
 		
 		const hash = location.hash;
 		if (hash&&hash.length>1){
@@ -976,6 +977,7 @@ async init(){
 		}
 
     }else if (/^\d+$/.test(tags)) {
+		this.checkLogin();
 		if (tags&&tags.trim()!==''){
 			const tag = parseInt(tags);
 			if (!Number.isNaN(tag)&&tag>=0){this.changeTag(String(tag));}

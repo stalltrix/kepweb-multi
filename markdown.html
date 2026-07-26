@@ -369,6 +369,7 @@ textarea{
 <div class="toolbar-item" id="tagBox">
 <label>标签</label>
 <select id="tagInput">
+<option value="" disabled selected>选择</option>
 <option value="0">保留 (0)</option>
                     <option value="1">kep列表 (1)</option>
 					<option value="2">计算机网络 (2)</option>
@@ -491,6 +492,12 @@ pointTo = editData.hex;
 if(editData.pointtoroot){
 pointToRoot = editData.pointtoroot;
 }
+}
+
+if (tag==="") {
+btn.disabled=false;
+showMsg("请选择一个标签");
+return
 }
 
 fetch("/index.php",{
